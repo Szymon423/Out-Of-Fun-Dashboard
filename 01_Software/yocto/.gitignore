@@ -1,0 +1,9 @@
+# Build output and caches stay local; only the build configuration is versioned.
+/build/*
+!/build/conf/
+/build/conf/*
+!/build/conf/local.conf
+!/build/conf/bblayers.conf
+!/build/conf/toolcfg.conf
+/downloads/
+/sstate-cache/
