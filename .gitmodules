@@ -1,0 +1,24 @@
+[submodule "01_Software/yocto/layers/bitbake"]
+	path = 01_Software/yocto/layers/bitbake
+	url = https://git.openembedded.org/bitbake
+	branch = 2.18
+[submodule "01_Software/yocto/layers/openembedded-core"]
+	path = 01_Software/yocto/layers/openembedded-core
+	url = https://git.openembedded.org/openembedded-core
+	branch = wrynose
+[submodule "01_Software/yocto/layers/meta-yocto"]
+	path = 01_Software/yocto/layers/meta-yocto
+	url = https://git.yoctoproject.org/meta-yocto
+	branch = wrynose
+[submodule "01_Software/yocto/layers/meta-openembedded"]
+	path = 01_Software/yocto/layers/meta-openembedded
+	url = https://git.openembedded.org/meta-openembedded
+	branch = wrynose
+[submodule "01_Software/yocto/layers/meta-raspberrypi"]
+	path = 01_Software/yocto/layers/meta-raspberrypi
+	url = https://git.yoctoproject.org/meta-raspberrypi
+	branch = wrynose
+[submodule "01_Software/yocto/layers/meta-webkit"]
+	path = 01_Software/yocto/layers/meta-webkit
+	url = https://github.com/Igalia/meta-webkit
+	branch = wrynose-latest
