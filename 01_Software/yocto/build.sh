@@ -8,7 +8,7 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/container.sh"
 
-DEFAULT_TARGET=core-image-base
+DEFAULT_TARGET=dashboard-image
 CONTAINER_NAME=dashboard-yocto-build
 LOG_DIR="$YOCTO_DIR/build/logs"
 PROGRESS="$LOG_DIR/progress.log"

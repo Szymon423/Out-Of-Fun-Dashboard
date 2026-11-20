@@ -2,13 +2,13 @@
 # Writes a built Yocto image to an SD card with bmaptool.
 #
 # Usage: ./flash.sh [-n] [-d /dev/sdX] [image]
-#   image  image recipe name, default: core-image-base
+#   image  image recipe name, default: dashboard-image
 #   -d     target device; without it the script finds the SD card itself
 #   -n     dry run: show what would happen without writing anything
 set -euo pipefail
 
 YOCTO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-DEFAULT_IMAGE=core-image-base
+DEFAULT_IMAGE=dashboard-image
 MAX_SIZE_BYTES=$(( 256 * 1000 ** 3 ))
 WAIT_SECONDS=${WAIT_SECONDS:-120}
 DRY_RUN=0
