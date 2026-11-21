@@ -14,3 +14,7 @@ IMAGE_INSTALL = " \
 	procps \
 	tzdata \
 "
+
+# Weston kiosk with Cog showing the benchmark page.
+IMAGE_FEATURES += "weston"
+IMAGE_INSTALL += "dashboard-kiosk dashboard-spike ttf-dejavu-sans ttf-dejavu-sans-mono bash"
