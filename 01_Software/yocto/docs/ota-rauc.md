@@ -356,6 +356,23 @@ Pierwsza aktualizacja przez sieć: z A (0.1) na B (0.2) za pomocą `./tools/ota.
   - kernel, który nie wstaje (brak `/boot/Image.gz`): U-Boot nie wczytuje kernela, robi trzy resety i wraca do starego slotu;
   - odcięcie zasilania w trakcie `rauc install`: Pi startuje ze starego slotu, a ponowna instalacja się udaje.
 
+#### Wyniki OTA-4 (22.11.2026)
+
+Wersja 0.3 z watchdogiem i sprawdzeniem stanu jest na obu slotach. Watchdog jest aktywny (`/dev/watchdog0`, 15 s), a `boot-complete.target` wymaga `dashboard-health.service`. Zwykła aktualizacja trwa około 80 s, a start jest akceptowany po około 35 s od restartu.
+
+| Test | Kto wykrył problem | Przebieg |
+|---|---|---|
+| kernel panic (`echo c > /proc/sysrq-trigger`) | kernel, `panic=5` | restart, ten sam slot, start zaakceptowany po 39 s |
+| zepsuty kiosk w B (`ExecStart=/bin/false`) | `dashboard-health` | 3 starty B oznaczone `NOT HEALTHY: dashboard-kiosk restarted within 15 s`, potem A; łącznie 2 min |
+| brak `/boot/Image.gz` w B | U-Boot | 3 resety bez Linuksa, potem A; SSH po 35 s zamiast 20 s; żadnego wpisu B w dzienniku |
+| odcięcie zasilania przy 74% `rauc install` | RAUC | na czas zapisu RAUC usuwa slot z `BOOT_ORDER` (`BOOT_ORDER=A`, `BOOT_B_LEFT=0`), więc Pi wstało z A; ponowna instalacja przeszła |
+
+Wnioski:
+- **Okno stabilności jest konieczne.** Kiosk z `/bin/false` co chwilę był przez moment `active`, więc pierwszy warunek przechodził („up after 0 s”). Zepsuty slot złapał dopiero licznik `NRestarts` w ciągu 15 s.
+- **`tools/ota.sh`.**
+  - Gdy pojawia się nowy start, skrypt zaznacza, że poprzedni nie został zaakceptowany. Pi potrafi się zrestartować między dwoma odpytaniami.
+  - Po przerwanej instalacji skrypt kończy się własnym komunikatem, a nie błędem `ssh`.
+
 ### OTA-5: Aktualizacja partycji boot
 - Przepis `dashboard-bootfs.bb` buduje obraz vfat z plików partycji boot (`IMAGE_BOOT_FILES`, `config.txt`, `u-boot.bin`, `boot.scr`). Użyje do tego `dosfstools-native` i `mtools-native`.
 - Dodać slot `bootloader` do pakietu aktualizacji.

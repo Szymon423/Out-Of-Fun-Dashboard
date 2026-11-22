@@ -84,6 +84,9 @@ reboot_and_wait() {
       read -r boot slot good health <<< "$info"
       if [[ $boot != "$old_boot" ]]; then
         if [[ $boot != "$last_boot" ]]; then
+          # A boot is accepted only once (we return then), so a newer boot means the
+          # previous one was not: the health check failed or the system hung.
+          (( n == 0 )) || echo "$(( SECONDS - t )) s:   start $n nie został zaakceptowany, Pi się zrestartowało"
           n=$(( n + 1 ))
           last_boot=$boot
           last_health=""
@@ -164,8 +167,9 @@ step "Instalacja do slotu $new_slot"
 t=$SECONDS
 status=0
 ssh_pi "rauc install $OTA_DIR/$name" || status=$?
-ssh_pi "rm -f $OTA_DIR/$name"
-(( status == 0 )) || die "instalacja nie powiodła się (kod $status). Pi dalej działa na slocie $old_slot."
+# May fail when the Pi lost power or the network; the next run clears /data/ota anyway.
+ssh_pi "rm -f $OTA_DIR/$name" || true
+(( status == 0 )) || die "instalacja przerwana (kod $status). RAUC wpisuje slot $new_slot do BOOT_ORDER dopiero po udanym zapisie, więc Pi wystartuje ze slotu $old_slot. Uruchom ota.sh jeszcze raz."
 echo "Zainstalowano w $(( SECONDS - t )) s."
 ssh_pi 'fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT'
 
