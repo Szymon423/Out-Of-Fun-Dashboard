@@ -1,0 +1,16 @@
+[Unit]
+Description=Check that the dashboard came up before RAUC marks this slot as good
+After=weston.service dashboard-kiosk.service dropbear.socket data.mount
+Before=boot-complete.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/dashboard-health
+TimeoutStartSec=3min
+# A failed check reboots the Pi. U-Boot counts every boot as a try of the slot
+# (boot.cmd.in) and boots the other slot after three failed ones.
+FailureAction=reboot
+
+[Install]
+RequiredBy=boot-complete.target

@@ -1,0 +1,52 @@
+#!/bin/sh
+# Health check of the current boot (docs/ota-rauc.md, OTA-4). rauc-mark-good runs after
+# boot-complete.target, and that target requires this check, so a slot is marked good only
+# when the dashboard really came up. A failed check reboots the Pi (FailureAction in the
+# unit); U-Boot counts every boot as a try and boots the other slot after three failed ones.
+# Every result is appended to /data/dashboard-health.log, which survives the reboot, while
+# the journal does not.
+set -u
+
+TIMEOUT_S=90   # time for everything to come up
+STABLE_S=15    # time the kiosk must then keep running without a restart
+SERVICES="weston.service dashboard-kiosk.service dropbear.socket"
+LOG=/data/dashboard-health.log
+
+slot=$(sed -n 's/.*rauc\.slot=\([^ ]*\).*/\1/p' /proc/cmdline)
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') slot $slot: $*" | tee -a "$LOG"
+    tail -n 200 "$LOG" > "$LOG.new" && mv "$LOG.new" "$LOG"
+}
+
+states() {
+    for unit in $SERVICES; do
+        printf '%s=%s ' "$unit" "$(systemctl show -P ActiveState "$unit")"
+    done
+}
+
+fail() {
+    log "NOT HEALTHY, rebooting: $* ($(states))"
+    exit 1
+}
+
+healthy() {
+    mountpoint -q /data && systemctl -q is-active $SERVICES
+}
+
+waited=0
+until healthy; do
+    # A unit that gave up (e.g. hit its restart limit) will not come back: fail at once.
+    systemctl -q is-failed $SERVICES && fail "a service failed after ${waited} s"
+    [ "$waited" -lt "$TIMEOUT_S" ] || fail "not up within ${TIMEOUT_S} s"
+    sleep 2
+    waited=$(( waited + 2 ))
+done
+
+restarts=$(systemctl show -P NRestarts dashboard-kiosk.service)
+sleep "$STABLE_S"
+healthy || fail "stopped within ${STABLE_S} s of coming up"
+[ "$(systemctl show -P NRestarts dashboard-kiosk.service)" = "$restarts" ] ||
+    fail "dashboard-kiosk restarted within ${STABLE_S} s"
+
+log "healthy, up after ${waited} s and stable for ${STABLE_S} s"

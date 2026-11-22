@@ -334,14 +334,27 @@ Pierwsza aktualizacja przez sieć: z A (0.1) na B (0.2) za pomocą `./tools/ota.
 - **Druga aktualizacja, z B na A, tym samym pakietem: 67 s.** Wysyłanie trwało 13 s zamiast 30, instalacja 35 s, a restart 19 s. Oba sloty mają teraz 0.2.
 
 ### OTA-4: Zabezpieczenia i testy powrotu
-- **Watchdog.** `RuntimeWatchdogSec=15s` w `/etc/systemd/system.conf.d/` (watchdog `bcm2835_wdt` jest wbudowany w kernel) oraz `panic=5`.
-- **Sprawdzenie stanu.** Usługa `dashboard-mark-good.service` zastępuje `rauc-mark-good`:
-  - startuje po `dashboard-kiosk.service`, czeka około 30 sekund i sprawdza, czy Weston i kiosk działają;
-  - jeśli tak, uruchamia `rauc status mark-good`, a jeśli nie, restartuje Pi, co zmniejsza licznik slotu.
-- **Testy:**
-  - pakiet z celowo zepsutym kioskiem: po trzech restartach Pi wraca do starego slotu;
-  - pakiet z kernelem, który nie wstaje: `panic=5`, kolejne restarty i powrót do starego slotu;
-  - wyłączenie zasilania w trakcie `rauc install`: Pi startuje ze starego slotu, a ponowna instalacja się udaje.
+- **Watchdog.** `RuntimeWatchdogSec=15s` w `/usr/lib/systemd/system.conf.d/dashboard-watchdog.conf`.
+  - `bcm2835_wdt` jest wbudowany w kernel i ma maksymalnie 15 s.
+  - Zawieszony PID 1 resetuje Pi, a kernel panic restartuje je po 5 s (`panic=5`).
+  - U-Boot liczy każdy taki start jako próbę slotu.
+- **Sprawdzenie stanu przez `boot-complete.target`, tak jak przewiduje systemd.**
+  - `rauc-mark-good` zostaje bez zmian. Ma `After=` i `Requires=boot-complete.target`.
+  - `dashboard-health.service` ma `Before=boot-complete.target` i `RequiredBy=boot-complete.target`.
+  - Jeśli sprawdzenie się nie powiedzie, cel nie zostanie osiągnięty, `rauc-mark-good` się nie uruchomi, a `FailureAction=reboot` zrestartuje Pi. Po trzech nieudanych startach U-Boot uruchomi drugi slot.
+  - Co sprawdzamy: `/data` jest zamontowane, a `weston.service`, `dashboard-kiosk.service` i `dropbear.socket` są aktywne.
+  - Limity: wszystko musi wstać w ciągu 90 s, a potem kiosk musi działać 15 s bez restartu (`NRestarts`). Usługa w stanie `failed` kończy sprawdzenie od razu, bez czekania 90 s.
+  - Wynik każdego startu trafia do `/data/dashboard-health.log`. Journal leży w RAM-ie i znika przy restarcie, a bez UART-u to jedyny ślad, dlaczego slot przepadł.
+- **Decyduje samo urządzenie.** Sprawdzenie i decyzja (zostać na slocie albo restart i powrót) zapadają na Pi, bez PC i bez SSH. Mechanizm działa tak samo przy aktualizacji z `tools/ota.sh`, jak i przy przyszłej autoaktualizacji z chmury: usługa z timerem na Pi, `rauc install https://…` (strumieniowanie RAUC), restart. Ta usługa trafi wtedy na listę sprawdzanych w `dashboard-health`, żeby zepsuta wersja nie mogła wyłączyć sobie aktualizacji. `dropbear.socket` na tej liście to lokalne sprawdzenie, czy serwer SSH nasłuchuje, bo wersja bez dostępu serwisowego też jest zepsuta.
+- **`tools/ota.sh` tylko obserwuje i czeka na zaakceptowany start, a nie tylko na SSH.** Przy zepsutym kiosku SSH działa, a Pi restartuje się dopiero po sprawdzeniu.
+  - Skrypt wypisuje każdy nowy start (po `boot_id`) i stan sprawdzenia, a na końcu dziennik sprawdzeń.
+  - Tryb `-R` tylko restartuje i obserwuje start. `REBOOT_CMD` podmienia polecenie restartu, np. na wywołanie kernel panic.
+- **Ryzyko.** Gdy oba sloty nie przechodzą sprawdzenia, U-Boot daje im ciągle nowe próby, a Pi restartuje się co około 2 minuty. SSH jest dostępne w każdym takim oknie. `systemctl mask dashboard-health.service` albo nowy pakiet przerywa pętlę.
+- **Testy bez budowania psujących pakietów.** Psujemy wprost nieaktywny slot: montujemy go, zmieniamy w nim jeden plik i robimy `rauc status mark-active other`. Potem przywracamy go zwykłą instalacją pakietu:
+  - watchdog jest aktywny, a kernel panic (`echo c > /proc/sysrq-trigger`) restartuje Pi i start jest akceptowany;
+  - zepsuty kiosk (`ExecStart=/bin/false`): trzy nieudane sprawdzenia i powrót do starego slotu;
+  - kernel, który nie wstaje (brak `/boot/Image.gz`): U-Boot nie wczytuje kernela, robi trzy resety i wraca do starego slotu;
+  - odcięcie zasilania w trakcie `rauc install`: Pi startuje ze starego slotu, a ponowna instalacja się udaje.
 
 ### OTA-5: Aktualizacja partycji boot
 - Przepis `dashboard-bootfs.bb` buduje obraz vfat z plików partycji boot (`IMAGE_BOOT_FILES`, `config.txt`, `u-boot.bin`, `boot.scr`). Użyje do tego `dosfstools-native` i `mtools-native`.
