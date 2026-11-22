@@ -1,0 +1,1288 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Test ekranu</title>
+<style>
+:root {
+  --bg: #0a0e16;
+  --surface: #111827;
+  --surface-2: #182133;
+  --line: #26324a;
+  --text: #e9eef7;
+  --muted: #8b97ad;
+  --accent: #6aa8ff;
+  --accent-2: #a78bfa;
+  --good: #34d399;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --bar-h: 60px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--text);
+  font-family: system-ui, "Noto Sans", "DejaVu Sans", sans-serif;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+button {
+  font: inherit; color: inherit; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 18px;
+}
+button:active { transform: scale(.97); background: #22304a; }
+button.primary { background: var(--accent); color: #06101f; border-color: transparent; font-weight: 650; }
+button[disabled] { opacity: .35; pointer-events: none; }
+.hidden { display: none !important; }
+svg.ico { width: 34px; height: 34px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Top bar */
+#bar {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--bar-h); z-index: 20;
+  display: flex; align-items: center; gap: 18px; padding: 0 16px;
+  background: rgba(10, 14, 22, .9); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; white-space: nowrap; line-height: 1.15; }
+.brand small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+nav { display: flex; gap: 8px; flex: 1; }
+nav button { padding: 8px 14px; font-size: 15px; }
+nav button.on { background: #1d2b47; border-color: var(--accent); }
+#hud { display: flex; align-items: center; gap: 12px; font-variant-numeric: tabular-nums; }
+#hudFps { font-size: 22px; font-weight: 700; min-width: 92px; text-align: right; }
+#hudP95 { font-size: 13px; color: var(--muted); min-width: 92px; line-height: 1.3; }
+#graph { display: block; background: #0d1320; border: 1px solid var(--line); border-radius: 8px; }
+
+/* Screens */
+#stage { position: fixed; top: var(--bar-h); left: 0; right: 0; bottom: 0; overflow: hidden; }
+.screen { position: absolute; inset: 0; display: none; }
+.screen.on { display: block; }
+.scene-host, .scene-fill { position: absolute; inset: 0; overflow: hidden; }
+.panel {
+  background: rgba(17, 24, 39, .92); border: 1px solid var(--line); border-radius: 22px;
+  padding: 26px 30px; box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+}
+.center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+h1 { font-size: 40px; letter-spacing: -.5px; }
+h2 { font-size: 26px; margin-bottom: 8px; }
+p.lead { color: var(--muted); font-size: 17px; line-height: 1.45; }
+
+/* Home */
+.glow { position: absolute; border-radius: 50%; opacity: .55; }
+.home-wrap { position: absolute; inset: 0; padding: 44px 56px; display: flex; flex-direction: column; gap: 26px; }
+.facts { display: flex; gap: 12px; flex-wrap: wrap; }
+.fact { background: rgba(24, 33, 51, .8); border: 1px solid var(--line); border-radius: 14px; padding: 10px 16px; min-width: 200px; }
+.fact span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.fact b { font-size: 16px; font-weight: 600; }
+.fact b.warn { color: var(--warn); }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: auto; }
+.tile {
+  text-align: left; padding: 26px; border-radius: 22px; min-height: 190px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: linear-gradient(160deg, rgba(36, 50, 80, .9), rgba(17, 24, 39, .95));
+}
+.tile b { font-size: 24px; }
+.tile span { color: var(--muted); font-size: 15px; line-height: 1.4; }
+.tile svg { color: var(--accent); }
+
+/* Touch menu */
+.touch-menu { position: absolute; inset: 0; padding: 44px 56px; display: flex; flex-direction: column; gap: 22px; }
+.touch-menu .tiles { margin-top: 0; grid-template-columns: repeat(2, 1fr); }
+.last { color: var(--muted); font-size: 15px; line-height: 1.6; }
+.last b { color: var(--text); }
+
+/* Touch overlays */
+.overlay { position: fixed; inset: 0; z-index: 40; background: #070a10; }
+.overlay canvas { position: absolute; inset: 0; }
+.ov-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; z-index: 2; }
+.ov-top span { background: rgba(17, 24, 39, .85); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; font-variant-numeric: tabular-nums; }
+.aim-hint { position: absolute; left: 50%; top: calc(50% - 120px); transform: translateX(-50%); color: var(--muted); font-size: 18px; z-index: 2; pointer-events: none; }
+.aim-cancel { position: absolute; left: 50%; top: calc(50% + 100px); transform: translateX(-50%); z-index: 2; }
+#aimResult { z-index: 3; width: 640px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; margin: 16px 0 22px; font-size: 17px; font-variant-numeric: tabular-nums; }
+.kv span { color: var(--muted); }
+.verdict { font-size: 20px; font-weight: 650; margin-top: 4px; }
+.row { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* Stress */
+#stressIntro { width: 1060px; max-height: 620px; overflow: hidden; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 20px; }
+.chip { font-size: 14px; padding: 6px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 15px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 13px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 8px; border-bottom: 1px solid rgba(38, 50, 74, .5); white-space: nowrap; }
+td.name { font-weight: 600; }
+.meter { width: 120px; height: 8px; border-radius: 99px; background: #0d1320; overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+.run-info {
+  position: absolute; left: 18px; top: 18px; z-index: 5; width: 420px;
+  background: rgba(10, 14, 22, .8); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px;
+}
+.run-info b { font-size: 18px; }
+.run-info .lvl { color: var(--muted); margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
+.prog { height: 6px; background: #0d1320; border-radius: 99px; overflow: hidden; margin-bottom: 12px; }
+.prog i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+/* Play */
+.side {
+  position: absolute; left: 16px; top: 16px; bottom: 16px; width: 300px; z-index: 5;
+  display: flex; flex-direction: column; gap: 8px;
+  background: rgba(10, 14, 22, .82); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+}
+.side button.scene-btn { text-align: left; padding: 10px 14px; font-size: 15px; }
+.side button.scene-btn.on { border-color: var(--accent); background: #1d2b47; }
+.level { display: flex; align-items: center; gap: 10px; margin-top: auto; }
+.level button { width: 56px; height: 56px; font-size: 26px; padding: 0; }
+.level div { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.level div b { display: block; font-size: 24px; }
+.level div span { color: var(--muted); font-size: 13px; }
+#playShow { position: absolute; left: 16px; bottom: 16px; z-index: 5; }
+.play-empty { position: absolute; left: 340px; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; }
+
+/* Scenes */
+.orb { position: absolute; border-radius: 50%; will-change: transform; }
+.blur-bg { background: #0b1222; }
+.blob { position: absolute; border-radius: 50%; will-change: transform; }
+.glass {
+  position: absolute; width: 240px; height: 150px; border-radius: 22px; padding: 16px 18px;
+  background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .2);
+  -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%);
+  will-change: transform;
+}
+.glass .g-t { font-size: 14px; color: rgba(255, 255, 255, .75); }
+.glass .g-v { font-size: 44px; font-weight: 700; margin-top: 4px; }
+.glass .g-s { font-size: 12px; color: rgba(255, 255, 255, .6); }
+.photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; will-change: transform, opacity; }
+.dom-grid { display: grid; gap: 3px; padding: 6px; background: #0b1020; align-content: start; }
+.tile-d { background: #141c2e; border-radius: 6px; padding: 4px 6px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+.tile-d b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile-d i { display: block; height: 3px; margin-top: 3px; background: var(--accent); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header id="bar">
+  <div class="brand">Out Of Fun<small>test ekranu i grafiki</small></div>
+  <nav>
+    <button data-go="home" class="on">Start</button>
+    <button data-go="touch">Dotyk</button>
+    <button data-go="stress">Obciążenie</button>
+    <button data-go="play">Plac zabaw</button>
+  </nav>
+  <div id="hud">
+    <canvas id="graph" width="180" height="38"></canvas>
+    <div id="hudP95">p95 –<br>&gt;33 ms –</div>
+    <div id="hudFps">– FPS</div>
+  </div>
+</header>
+
+<main id="stage">
+
+  <section id="home" class="screen on">
+    <div id="homeBg" class="scene-host"></div>
+    <div class="home-wrap">
+      <div>
+        <h1>Test ekranu i grafiki</h1>
+        <p class="lead">Raspberry Pi 4 · Touch Display 2 · WPE WebKit w kiosku Westona</p>
+      </div>
+      <div class="facts" id="facts"></div>
+      <div class="tiles">
+        <button class="tile" data-go="touch">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M9 11V5a2 2 0 0 1 4 0v5"/><path d="M13 10V8a2 2 0 0 1 4 0v4"/><path d="M17 11a2 2 0 0 1 4 0v3a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4 15a2 2 0 0 1 3-2.6L9 14"/></svg>
+          <b>Dotyk</b>
+          <span>Wiele palców naraz ze śladami oraz precyzja trafień w rogach i na krawędziach ekranu.</span>
+        </button>
+        <button class="tile" data-go="stress">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+          <b>Obciążenie</b>
+          <span>Siedem scen. Każda zwiększa obciążenie, dopóki animacja jest płynna. Około 3 minut.</span>
+        </button>
+        <button class="tile" data-go="play">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>
+          <b>Plac zabaw</b>
+          <span>Wybierz scenę i obciążenie ręcznie, żeby pokazać, co potrafi ekran.</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section id="touch" class="screen">
+    <div class="touch-menu">
+      <div>
+        <h2>Dotyk</h2>
+        <p class="lead">Ekran Touch Display 2 obsługuje do pięciu palców. Obraz jest obrócony przez Westona, więc dotyk musi się obracać razem z nim.</p>
+      </div>
+      <div class="tiles">
+        <button class="tile" id="openFree">
+          <b>Wiele palców</b>
+          <span>Każdy palec dostaje własny kolor, ślad i współrzędne. Sprawdza liczbę punktów naraz i płynność śledzenia.</span>
+        </button>
+        <button class="tile" id="openAim">
+          <b>Precyzja</b>
+          <span>Dwanaście celów, także w rogach. Liczy błąd w pikselach i wykrywa obróconą albo odwróconą oś.</span>
+        </button>
+      </div>
+      <div class="last" id="touchLast"></div>
+    </div>
+  </section>
+
+  <section id="stress" class="screen">
+    <div id="stressScene" class="scene-host"></div>
+    <div id="stressIntro" class="panel center">
+      <h2>Test obciążenia</h2>
+      <p class="lead">Każda scena startuje od małego obciążenia i zwiększa je, dopóki animacja trzyma się
+        <b id="thrText">55 FPS i p95 ≤ 20 ms</b>. Wynik to największe obciążenie, przy którym obraz był jeszcze płynny.</p>
+      <div class="chips" id="sceneChips"></div>
+      <div id="stressTable"></div>
+      <div class="row" style="margin-top: 18px;">
+        <button class="primary" id="runAll">Uruchom wszystkie sceny</button>
+      </div>
+    </div>
+    <div id="runInfo" class="run-info hidden">
+      <b id="runName"></b>
+      <div class="lvl" id="runLevel"></div>
+      <div class="prog"><i id="runProg"></i></div>
+      <button id="runCancel">Przerwij</button>
+    </div>
+  </section>
+
+  <section id="play" class="screen">
+    <div id="playScene" class="scene-host"></div>
+    <div class="play-empty" id="playEmpty">Wybierz scenę po lewej</div>
+    <div class="side" id="playPanel">
+      <div id="playList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      <div class="level">
+        <button id="lvlDown">−</button>
+        <div><b id="lvlValue">–</b><span id="lvlUnit">poziom</span></div>
+        <button id="lvlUp">+</button>
+      </div>
+      <button id="playHide">Ukryj panel</button>
+    </div>
+    <button id="playShow" class="hidden">Panel</button>
+  </section>
+
+</main>
+
+<div id="ovFree" class="overlay hidden">
+  <canvas id="cvFree"></canvas>
+  <div class="ov-top">
+    <span id="freeInfo">Dotknij ekranu, nawet pięcioma palcami</span>
+    <button id="freeClear">Wyczyść</button>
+    <button id="freeClose" class="primary">Gotowe</button>
+  </div>
+</div>
+
+<div id="ovAim" class="overlay hidden">
+  <canvas id="cvAim"></canvas>
+  <div class="aim-hint" id="aimHint"></div>
+  <button class="aim-cancel" id="aimCancel">Przerwij</button>
+  <div id="aimResult" class="panel center hidden">
+    <h2>Wynik precyzji</h2>
+    <div class="verdict" id="aimVerdict"></div>
+    <div class="kv" id="aimStats"></div>
+    <div class="row">
+      <button id="aimAgain">Powtórz</button>
+      <button id="aimDone" class="primary">Gotowe</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ---------- Helpers ----------
+const $ = (id) => document.getElementById(id);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function el(tag, cls, parent) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function store(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage unavailable */ }
+}
+function load(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+}
+function report(tag, data) {
+  // Cog writes console messages to the journal (--enable-write-console-messages-to-stdout).
+  console.log(tag + ' ' + JSON.stringify(data));
+}
+function stats(arr) {
+  if (!arr.length) return { fps: 0, p95: 0, over: 0, frames: 0 };
+  const s = Array.from(arr).sort((a, b) => a - b);
+  const mean = s.reduce((a, b) => a + b, 0) / s.length;
+  return {
+    fps: 1000 / mean,
+    p95: s[Math.floor(0.95 * (s.length - 1))],
+    over: s.filter((d) => d > 33.4).length / s.length,
+    frames: s.length,
+  };
+}
+
+// ---------- Frame timing ----------
+const RING = 600;
+const ring = new Float32Array(RING);
+let ringIdx = 0, ringCount = 0;
+let collector = null;
+const frameHooks = new Set();
+let lastT = performance.now();
+
+function recent(n) {
+  const out = [];
+  const m = Math.min(n, ringCount);
+  for (let i = 0; i < m; i++) out.push(ring[(ringIdx - 1 - i + RING) % RING]);
+  return out;
+}
+function loop(t) {
+  const d = t - lastT;
+  lastT = t;
+  if (d > 0 && d < 1000) {
+    ring[ringIdx] = d;
+    ringIdx = (ringIdx + 1) % RING;
+    if (ringCount < RING) ringCount++;
+    if (collector) collector.push(d);
+  }
+  for (const hook of frameHooks) {
+    try { hook(t, d); } catch (e) { console.error(e); frameHooks.delete(hook); }
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Display refresh, measured at start; thresholds follow it.
+let refreshHz = 60;
+let minFps = 55, maxP95 = 20;
+function setThresholds(hz) {
+  refreshHz = hz;
+  minFps = Math.floor(hz * 0.92);
+  maxP95 = Math.ceil(1000 / hz * 1.25);
+  $('thrText').textContent = `${minFps} FPS i p95 ≤ ${maxP95} ms`;
+}
+
+// ---------- HUD ----------
+const graph = $('graph').getContext('2d');
+function colorFor(d) {
+  if (d <= maxP95) return '#34d399';
+  if (d <= 33.4) return '#fbbf24';
+  return '#f87171';
+}
+function drawHud() {
+  const last = recent(90);
+  const s = stats(recent(120));
+  $('hudFps').textContent = s.frames ? `${Math.round(s.fps)} FPS` : '– FPS';
+  $('hudFps').style.color = s.fps >= minFps ? 'var(--text)' : (s.fps >= 30 ? 'var(--warn)' : 'var(--bad)');
+  $('hudP95').innerHTML = `p95 ${s.p95.toFixed(1)} ms<br>&gt;33 ms ${(s.over * 100).toFixed(1)}%`;
+  const w = 180, h = 38;
+  graph.clearRect(0, 0, w, h);
+  const bw = w / 90;
+  for (let i = 0; i < last.length; i++) {
+    const d = last[last.length - 1 - i];
+    const bh = Math.min(d, 50) / 50 * (h - 2);
+    graph.fillStyle = colorFor(d);
+    graph.fillRect(i * bw, h - bh, Math.max(1, bw - 0.5), bh);
+  }
+  graph.fillStyle = 'rgba(255,255,255,.25)';
+  graph.fillRect(0, h - (16.7 / 50) * (h - 2), w, 1);
+  graph.fillRect(0, h - (33.3 / 50) * (h - 2), w, 1);
+}
+setInterval(drawHud, 250);
+
+// ---------- Input ----------
+// Touch events first; mouse via pointer events for testing on a PC.
+function onPoints(target, handlers) {
+  const opts = { passive: false };
+  const each = (fn) => (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) fn(t.identifier, t.clientX, t.clientY);
+  };
+  target.addEventListener('touchstart', each(handlers.down), opts);
+  target.addEventListener('touchmove', each(handlers.move), opts);
+  target.addEventListener('touchend', each(handlers.up), opts);
+  target.addEventListener('touchcancel', each(handlers.up), opts);
+  target.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    target.setPointerCapture(e.pointerId);
+    handlers.down('mouse', e.clientX, e.clientY);
+  });
+  target.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse' || !(e.buttons & 1)) return;
+    handlers.move('mouse', e.clientX, e.clientY);
+  });
+  target.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    handlers.up('mouse', e.clientX, e.clientY);
+  });
+}
+function fitCanvas(cv) {
+  cv.width = window.innerWidth;
+  cv.height = window.innerHeight;
+  return cv.getContext('2d');
+}
+function drawGrid(ctx, w, h) {
+  ctx.strokeStyle = 'rgba(255,255,255,.05)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= w; x += 80) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); }
+  for (let y = 0; y <= h; y += 80) { ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); }
+  ctx.stroke();
+}
+
+// ---------- Touch: many fingers ----------
+const COLORS = ['#6aa8ff', '#f472b6', '#34d399', '#fbbf24', '#a78bfa', '#f87171', '#22d3ee', '#fb923c', '#a3e635', '#e879f9'];
+const Free = {
+  ctx: null, active: new Map(), trails: [], maxSim: 0, total: 0,
+  open() {
+    $('ovFree').classList.remove('hidden');
+    this.ctx = fitCanvas($('cvFree'));
+    this.clear();
+    frameHooks.add(this.draw);
+  },
+  close() {
+    frameHooks.delete(this.draw);
+    $('ovFree').classList.add('hidden');
+    const result = { maxSimultaneous: this.maxSim, touches: this.total };
+    store('freeResult', result);
+    report('TOUCH_FREE', result);
+    renderTouchLast();
+  },
+  clear() { this.active.clear(); this.trails = []; this.maxSim = 0; this.total = 0; this.info(); },
+  slot() {
+    const used = new Set([...this.active.values()].map((p) => p.slot));
+    let s = 1;
+    while (used.has(s)) s++;
+    return s;
+  },
+  info() {
+    $('freeInfo').textContent = `Palce teraz: ${this.active.size} · najwięcej naraz: ${this.maxSim} · dotknięć: ${this.total}`;
+  },
+  down(id, x, y) {
+    const slot = Free.slot();
+    const color = COLORS[(slot - 1) % COLORS.length];
+    const trail = { color, points: [[x, y, performance.now()]], ended: 0 };
+    Free.trails.push(trail);
+    Free.active.set(id, { x, y, slot, color, trail });
+    Free.total++;
+    Free.maxSim = Math.max(Free.maxSim, Free.active.size);
+    Free.info();
+  },
+  move(id, x, y) {
+    const p = Free.active.get(id);
+    if (!p) return;
+    p.x = x; p.y = y;
+    p.trail.points.push([x, y, performance.now()]);
+  },
+  up(id) {
+    const p = Free.active.get(id);
+    if (!p) return;
+    p.trail.ended = performance.now();
+    Free.active.delete(id);
+    Free.info();
+  },
+  draw() {
+    const ctx = Free.ctx, w = ctx.canvas.width, h = ctx.canvas.height, now = performance.now();
+    ctx.clearRect(0, 0, w, h);
+    drawGrid(ctx, w, h);
+    Free.trails = Free.trails.filter((t) => !t.ended || now - t.ended < 2500);
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    for (const t of Free.trails) {
+      const fade = t.ended ? 1 - (now - t.ended) / 2500 : 1;
+      ctx.strokeStyle = t.color;
+      ctx.globalAlpha = 0.75 * fade;
+      ctx.beginPath();
+      t.points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.font = '600 16px system-ui, "DejaVu Sans", sans-serif';
+    for (const p of Free.active.values()) {
+      ctx.strokeStyle = 'rgba(255,255,255,.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, p.y + 0.5); ctx.lineTo(w, p.y + 0.5);
+      ctx.moveTo(p.x + 0.5, 0); ctx.lineTo(p.x + 0.5, h);
+      ctx.stroke();
+      ctx.fillStyle = p.color + '33';
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 46, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      const label = `${p.slot}  ${Math.round(p.x)}, ${Math.round(p.y)}`;
+      const lx = p.x + 56 + 150 > w ? p.x - 56 - ctx.measureText(label).width : p.x + 56;
+      const ly = p.y - 56 < 20 ? p.y + 70 : p.y - 56;
+      ctx.fillText(label, lx, ly);
+    }
+  },
+};
+
+// ---------- Touch: precision ----------
+const Aim = {
+  ctx: null, targets: [], i: 0, hits: [], busy: false, done: false,
+  open() {
+    $('ovAim').classList.remove('hidden');
+    $('aimResult').classList.add('hidden');
+    $('aimCancel').classList.remove('hidden');
+    this.ctx = fitCanvas($('cvAim'));
+    this.build();
+    this.i = 0; this.hits = []; this.busy = false; this.done = false;
+    this.draw();
+  },
+  close() { $('ovAim').classList.add('hidden'); renderTouchLast(); },
+  build() {
+    const W = window.innerWidth, H = window.innerHeight, m = 44;
+    const pts = [[m, m], [W / 2, m], [W - m, m], [m, H / 2], [W / 2, H / 2], [W - m, H / 2], [m, H - m], [W / 2, H - m], [W - m, H - m]];
+    let guard = 0;
+    while (pts.length < 12 && guard++ < 500) {
+      const x = rnd(m, W - m), y = rnd(m, H - m);
+      const inCenter = Math.abs(x - W / 2) < 240 && Math.abs(y - H / 2) < 170;
+      const tooClose = pts.some(([px, py]) => Math.hypot(px - x, py - y) < 130);
+      if (!inCenter && !tooClose) pts.push([x, y]);
+    }
+    for (let i = pts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pts[i], pts[j]] = [pts[j], pts[i]];
+    }
+    this.targets = pts;
+  },
+  down(id, x, y) {
+    if (Aim.busy || Aim.done) return;
+    const [tx, ty] = Aim.targets[Aim.i];
+    Aim.hits.push({ tx, ty, x, y, err: Math.hypot(x - tx, y - ty) });
+    Aim.busy = true;
+    Aim.draw();
+    setTimeout(() => {
+      Aim.busy = false;
+      Aim.i++;
+      if (Aim.i >= Aim.targets.length) Aim.finish(); else Aim.draw();
+    }, 300);
+  },
+  draw() {
+    const ctx = this.ctx, w = ctx.canvas.width, h = ctx.canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    drawGrid(ctx, w, h);
+    for (const hit of this.hits) {
+      const c = hit.err < 10 ? '#34d399' : hit.err < 25 ? '#fbbf24' : '#f87171';
+      ctx.strokeStyle = 'rgba(255,255,255,.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(hit.tx, hit.ty, 18, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = c; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(hit.tx, hit.ty); ctx.lineTo(hit.x, hit.y); ctx.stroke();
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(hit.x, hit.y, 5, 0, Math.PI * 2); ctx.fill();
+    }
+    if (!this.done && this.i < this.targets.length) {
+      const [tx, ty] = this.targets[this.i];
+      ctx.strokeStyle = '#6aa8ff';
+      for (const [r, lw] of [[34, 2], [20, 2], [6, 3]]) {
+        ctx.lineWidth = lw;
+        ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tx - 44, ty); ctx.lineTo(tx + 44, ty);
+      ctx.moveTo(tx, ty - 44); ctx.lineTo(tx, ty + 44);
+      ctx.stroke();
+      $('aimHint').textContent = `Dotknij środka celu · ${this.i + 1} z ${this.targets.length}`;
+    } else {
+      $('aimHint').textContent = '';
+    }
+  },
+  finish() {
+    this.done = true;
+    $('aimCancel').classList.add('hidden');
+    this.draw();
+    const W = window.innerWidth, H = window.innerHeight;
+    const n = this.hits.length;
+    const mean = (f) => this.hits.reduce((a, hit) => a + f(hit), 0) / n;
+    const errors = this.hits.map((hit) => hit.err);
+    // Compare with other mappings to spot a wrong rotation or mirrored axis.
+    const maps = {
+      'poprawne': (x, y) => [x, y],
+      'oś X odwrócona': (x, y) => [W - x, y],
+      'oś Y odwrócona': (x, y) => [x, H - y],
+      'obraz obrócony o 180°': (x, y) => [W - x, H - y],
+      'osie zamienione (obrót o 90°)': (x, y) => [y * W / H, x * H / W],
+      'osie zamienione i odwrócone (obrót o 270°)': (x, y) => [W - y * W / H, H - x * H / W],
+    };
+    const fit = {};
+    for (const [name, f] of Object.entries(maps)) {
+      fit[name] = mean((hit) => { const [x, y] = f(hit.x, hit.y); return Math.hypot(x - hit.tx, y - hit.ty); });
+    }
+    const best = Object.keys(fit).reduce((a, b) => (fit[a] <= fit[b] ? a : b));
+    const meanErr = mean((hit) => hit.err);
+    const result = {
+      targets: n,
+      meanErrorPx: +meanErr.toFixed(1),
+      maxErrorPx: +Math.max(...errors).toFixed(1),
+      biasXPx: +mean((hit) => hit.x - hit.tx).toFixed(1),
+      biasYPx: +mean((hit) => hit.y - hit.ty).toFixed(1),
+      mapping: best,
+    };
+    let verdict, cls;
+    if (best !== 'poprawne' && fit[best] < meanErr * 0.5) {
+      verdict = `Dotyk nie pasuje do obrazu: wygląda na to, że ${best}.`; cls = 'bad';
+    } else if (meanErr < 8) { verdict = 'Bardzo dokładnie'; cls = 'good'; }
+    else if (meanErr < 15) { verdict = 'Dokładnie'; cls = 'good'; }
+    else if (meanErr < 30) { verdict = 'Akceptowalnie'; cls = 'warn'; }
+    else { verdict = 'Duży błąd trafień, sprawdź kalibrację'; cls = 'bad'; }
+    result.verdict = verdict;
+    $('aimVerdict').textContent = verdict;
+    $('aimVerdict').className = 'verdict ' + cls;
+    $('aimStats').innerHTML = `
+      <span>Średni błąd</span><b>${result.meanErrorPx} px</b>
+      <span>Największy błąd</span><b>${result.maxErrorPx} px</b>
+      <span>Przesunięcie średnie</span><b>x ${result.biasXPx} px, y ${result.biasYPx} px</b>
+      <span>Dopasowanie osi</span><b>${best}</b>`;
+    $('aimResult').classList.remove('hidden');
+    store('aimResult', result);
+    report('TOUCH_AIM', result);
+  },
+};
+
+function renderTouchLast() {
+  const f = load('freeResult'), a = load('aimResult');
+  const parts = [];
+  if (f) parts.push(`Wiele palców: najwięcej naraz <b>${f.maxSimultaneous}</b>`);
+  if (a) parts.push(`Precyzja: średni błąd <b>${a.meanErrorPx} px</b>, największy <b>${a.maxErrorPx} px</b>, osie: <b>${a.mapping}</b>`);
+  $('touchLast').innerHTML = parts.length ? 'Ostatnie wyniki: ' + parts.join(' · ') : '';
+}
+
+// ---------- WebGL helpers ----------
+function glCanvas(root) {
+  const cv = el('canvas', 'scene-fill', root);
+  cv.width = root.clientWidth;
+  cv.height = root.clientHeight;
+  const gl = cv.getContext('webgl', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+  if (!gl) throw new Error('WebGL niedostępny');
+  return { cv, gl };
+}
+function glProgram(gl, vs, fs) {
+  const make = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, make(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, make(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+function glDispose(gl, cv) {
+  const ext = gl && gl.getExtension('WEBGL_lose_context');
+  if (ext) ext.loseContext();
+  cv.remove();
+}
+
+// ---------- Generated photos ----------
+let photoCache = null;
+function mixColor(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const m = (s) => Math.round(((pa >> s) & 255) * (1 - t) + ((pb >> s) & 255) * t);
+  return `rgb(${m(16)},${m(8)},${m(0)})`;
+}
+async function makeLandscape(w, h, seed) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const palettes = [
+    ['#0b1d3a', '#3a5fa8', '#f6b37a', '#ffe1a8'],
+    ['#081226', '#1d2e5c', '#6d4aa8', '#e39ad0'],
+    ['#4f9fe8', '#9fd2ff', '#fff1c9', '#ffd27a'],
+    ['#14080e', '#5a1f3a', '#d9603b', '#ffb067'],
+  ];
+  const p = palettes[seed % palettes.length];
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, p[0]); sky.addColorStop(0.55, p[1]); sky.addColorStop(0.85, p[2]); sky.addColorStop(1, p[3]);
+  g.fillStyle = sky;
+  g.fillRect(0, 0, w, h);
+  if (seed % palettes.length !== 2) {
+    g.fillStyle = '#fff';
+    for (let i = 0; i < 260; i++) {
+      g.globalAlpha = Math.random() * 0.8;
+      const s = Math.random() * 1.8;
+      g.fillRect(Math.random() * w, Math.random() * h * 0.55, s, s);
+    }
+    g.globalAlpha = 1;
+  }
+  const sx = w * rnd(0.25, 0.75), sy = h * rnd(0.32, 0.5), sr = h * rnd(0.05, 0.09);
+  const sun = g.createRadialGradient(sx, sy, 0, sx, sy, sr * 6);
+  sun.addColorStop(0, 'rgba(255,244,220,1)');
+  sun.addColorStop(0.16, 'rgba(255,226,180,.9)');
+  sun.addColorStop(1, 'rgba(255,200,150,0)');
+  g.fillStyle = sun;
+  g.fillRect(0, 0, w, h);
+  for (let layer = 0; layer < 5; layer++) {
+    const base = h * (0.52 + layer * 0.1), amp = h * (0.17 - layer * 0.025);
+    const f1 = rnd(0.002, 0.005), f2 = rnd(0.009, 0.018), ph = rnd(0, 100);
+    g.beginPath();
+    g.moveTo(0, h);
+    for (let x = 0; x <= w; x += 6) {
+      const y = base - amp * (0.6 * Math.sin(x * f1 + ph) + 0.3 * Math.sin(x * f2 + ph * 1.7) + 0.1 * Math.sin(x * f2 * 3.1 + ph));
+      g.lineTo(x, y);
+    }
+    g.lineTo(w, h);
+    g.closePath();
+    g.fillStyle = mixColor(p[1], '#05070c', 0.35 + layer * 0.14);
+    g.fill();
+    const mist = g.createLinearGradient(0, base - amp, 0, base + 40);
+    mist.addColorStop(0, 'rgba(255,255,255,0)');
+    mist.addColorStop(1, `rgba(255,255,255,${0.04 + layer * 0.015})`);
+    g.fillStyle = mist;
+    g.fillRect(0, base - amp, w, amp + 40);
+  }
+  const v = g.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, h * 0.95);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(0,0,0,.45)');
+  g.fillStyle = v;
+  g.fillRect(0, 0, w, h);
+  const blob = await new Promise((r) => (c.toBlob ? c.toBlob(r, 'image/jpeg', 0.9) : r(null)));
+  return blob ? URL.createObjectURL(blob) : c.toDataURL('image/jpeg', 0.9);
+}
+
+// ---------- Scenes ----------
+// Each scene: mount(root), setLevel(n), unmount(). Levels grow until the animation stops being smooth.
+const Scenes = [
+  {
+    id: 'css', name: 'Transformacje CSS', unit: 'elementów',
+    levels: [50, 100, 200, 400, 800, 1600, 3200],
+    mount(root) { this.box = el('div', 'scene-fill', root); this.w = root.clientWidth; this.h = root.clientHeight; this.items = []; },
+    setLevel(n) {
+      while (this.items.length < n) {
+        const d = el('div', 'orb', this.box);
+        const s = rnd(18, 56), hue = Math.round(rnd(180, 330));
+        d.style.cssText = `width:${s}px;height:${s}px;left:${rnd(0, this.w - s)}px;top:${rnd(0, this.h - s)}px;` +
+          `background:radial-gradient(circle at 32% 30%,hsl(${hue},95%,78%),hsl(${hue},85%,52%) 55%,hsl(${hue},80%,28%) 100%)`;
+        d.animate(
+          [{ transform: 'translate(0px,0px) rotate(0deg) scale(1)' },
+           { transform: `translate(${rnd(-160, 160)}px,${rnd(-120, 120)}px) rotate(${rnd(-180, 180)}deg) scale(${rnd(0.6, 1.4)})` }],
+          { duration: rnd(1800, 5200), iterations: Infinity, direction: 'alternate', easing: 'ease-in-out', delay: -rnd(0, 4000) });
+        this.items.push(d);
+      }
+      while (this.items.length > n) this.items.pop().remove();
+    },
+    unmount() { this.box.remove(); this.items = []; },
+  },
+  {
+    id: 'blur', name: 'Rozmycie tła (szkło)', unit: 'kart',
+    levels: [1, 2, 4, 6, 8, 12, 16],
+    mount(root) {
+      this.box = el('div', 'scene-fill blur-bg', root);
+      this.w = root.clientWidth; this.h = root.clientHeight; this.cards = [];
+      [200, 265, 320, 170, 30].forEach((hue) => {
+        const b = el('div', 'blob', this.box), s = rnd(340, 560);
+        b.style.cssText = `width:${s}px;height:${s}px;left:${rnd(-100, this.w - s + 100)}px;top:${rnd(-100, this.h - s + 100)}px;` +
+          `background:radial-gradient(circle,hsla(${hue},90%,60%,.95),hsla(${hue},90%,50%,0) 70%)`;
+        b.animate([{ transform: 'translate(0px,0px)' }, { transform: `translate(${rnd(-300, 300)}px,${rnd(-200, 200)}px)` }],
+          { duration: rnd(5000, 9000), iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' });
+      });
+    },
+    setLevel(n) {
+      const names = ['Warszawa', 'Spotify', 'Kalendarz', 'Zdjęcia', 'Światło', 'Pogoda'];
+      while (this.cards.length < n) {
+        const i = this.cards.length, c = el('div', 'glass', this.box);
+        c.innerHTML = `<div class="g-t">${names[i % names.length]}</div><div class="g-v">${Math.round(rnd(-5, 28))}°</div>` +
+          `<div class="g-s">Aktualizacja ${Math.round(rnd(1, 59))} min temu</div>`;
+        c.style.left = rnd(0, this.w - 240) + 'px';
+        c.style.top = rnd(0, this.h - 150) + 'px';
+        c.animate([{ transform: 'translate(0px,0px)' }, { transform: `translate(${rnd(-220, 220)}px,${rnd(-140, 140)}px)` }],
+          { duration: rnd(3000, 7000), iterations: Infinity, direction: 'alternate', easing: 'ease-in-out', delay: -rnd(0, 3000) });
+        this.cards.push(c);
+      }
+      while (this.cards.length > n) this.cards.pop().remove();
+    },
+    unmount() { this.box.remove(); this.cards = []; },
+  },
+  {
+    id: 'canvas', name: 'Canvas 2D', unit: 'cząstek',
+    levels: [1000, 2000, 4000, 8000, 16000, 32000, 64000],
+    mount(root) {
+      this.w = root.clientWidth; this.h = root.clientHeight;
+      this.cv = el('canvas', 'scene-fill', root);
+      this.cv.width = this.w; this.cv.height = this.h;
+      this.ctx = this.cv.getContext('2d');
+      const s = document.createElement('canvas');
+      s.width = s.height = 16;
+      const g = s.getContext('2d'), gr = g.createRadialGradient(8, 8, 0, 8, 8, 8);
+      gr.addColorStop(0, 'rgba(255,255,255,1)');
+      gr.addColorStop(0.3, 'rgba(140,190,255,.85)');
+      gr.addColorStop(1, 'rgba(90,120,255,0)');
+      g.fillStyle = gr;
+      g.fillRect(0, 0, 16, 16);
+      this.sprite = s;
+      this.n = 0;
+      this.hook = (t) => this.draw(t);
+      frameHooks.add(this.hook);
+    },
+    setLevel(n) {
+      const px = new Float32Array(n), py = new Float32Array(n), vx = new Float32Array(n), vy = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        px[i] = Math.random() * this.w; py[i] = Math.random() * this.h;
+        const a = Math.random() * 6.283, sp = rnd(0.3, 1.6);
+        vx[i] = Math.cos(a) * sp; vy[i] = Math.sin(a) * sp;
+      }
+      Object.assign(this, { n, px, py, vx, vy });
+    },
+    draw(t) {
+      const { ctx, w, h, n, px, py, vx, vy, sprite } = this;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(8,11,20,.35)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'lighter';
+      const cx = w / 2 + Math.cos(t / 1300) * w * 0.3, cy = h / 2 + Math.sin(t / 1700) * h * 0.3;
+      for (let i = 0; i < n; i++) {
+        let x = px[i], y = py[i];
+        const dx = cx - x, dy = cy - y, f = 40 / (dx * dx + dy * dy + 900);
+        vx[i] = (vx[i] + dx * f) * 0.996;
+        vy[i] = (vy[i] + dy * f) * 0.996;
+        x += vx[i]; y += vy[i];
+        if (x < 0) x += w; else if (x >= w) x -= w;
+        if (y < 0) y += h; else if (y >= h) y -= h;
+        px[i] = x; py[i] = y;
+        ctx.drawImage(sprite, x - 4, y - 4, 8, 8);
+      }
+    },
+    unmount() { frameHooks.delete(this.hook); this.cv.remove(); },
+  },
+  {
+    id: 'webgl', name: 'Cząstki WebGL', unit: 'cząstek',
+    levels: [25000, 50000, 100000, 200000, 400000, 800000, 1600000],
+    mount(root) {
+      Object.assign(this, glCanvas(root));
+      const gl = this.gl;
+      this.prog = glProgram(gl, `
+        attribute vec2 seed;
+        uniform float t;
+        uniform float aspect;
+        varying float vMix;
+        void main() {
+          float arm = floor(seed.x * 3.0);
+          float r = pow(seed.y, 0.6);
+          float spread = (fract(seed.x * 3.0) - 0.5) * (0.9 - 0.6 * r);
+          float a = arm * 2.0944 + r * 5.0 + spread + t * (0.05 + 0.25 * (1.0 - r));
+          vec2 p = vec2(cos(a), sin(a)) * r * 0.92;
+          p += 0.025 * vec2(sin(t * 1.3 + seed.x * 91.0), cos(t * 1.1 + seed.y * 57.0));
+          p.x /= aspect;
+          gl_Position = vec4(p, 0.0, 1.0);
+          gl_PointSize = 1.0 + 2.0 * (1.0 - r);
+          vMix = r;
+        }`, `
+        precision mediump float;
+        varying float vMix;
+        void main() {
+          vec3 c = mix(vec3(1.0, 0.85, 0.6), vec3(0.35, 0.5, 1.0), vMix);
+          gl_FragColor = vec4(c * 0.18, 1.0);
+        }`);
+      this.buf = gl.createBuffer();
+      this.locSeed = gl.getAttribLocation(this.prog, 'seed');
+      this.locT = gl.getUniformLocation(this.prog, 't');
+      this.locAspect = gl.getUniformLocation(this.prog, 'aspect');
+      this.n = 0;
+      this.hook = (t) => this.draw(t);
+      frameHooks.add(this.hook);
+    },
+    setLevel(n) {
+      const gl = this.gl, data = new Float32Array(n * 2);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      this.n = n;
+    },
+    draw(t) {
+      const gl = this.gl, cv = this.cv;
+      gl.viewport(0, 0, cv.width, cv.height);
+      gl.clearColor(0.02, 0.03, 0.06, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(this.prog);
+      gl.uniform1f(this.locT, t / 1000);
+      gl.uniform1f(this.locAspect, cv.width / cv.height);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      gl.enableVertexAttribArray(this.locSeed);
+      gl.vertexAttribPointer(this.locSeed, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.POINTS, 0, this.n);
+    },
+    unmount() { frameHooks.delete(this.hook); glDispose(this.gl, this.cv); },
+  },
+  {
+    id: 'shader', name: 'Shader pełnoekranowy', unit: 'oktaw szumu',
+    levels: [1, 2, 3, 4, 6, 8, 12, 16],
+    mount(root) {
+      Object.assign(this, glCanvas(root));
+      const gl = this.gl;
+      this.prog = glProgram(gl, `
+        attribute vec2 pos;
+        void main() { gl_Position = vec4(pos, 0.0, 1.0); }`, `
+        precision highp float;
+        uniform vec2 res;
+        uniform float t;
+        uniform int oct;
+        float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+        float noise(vec2 p) {
+          vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+        float fbm(vec2 p) {
+          float a = 0.0, amp = 0.5, sum = 0.0;
+          for (int i = 0; i < 32; i++) {
+            if (i >= oct) break;
+            a += amp * noise(p); sum += amp;
+            p = p * 2.02 + vec2(1.7, 9.2); amp *= 0.5;
+          }
+          return a / sum;
+        }
+        void main() {
+          vec2 uv = gl_FragCoord.xy / res.y;
+          vec2 p = uv * 2.5 + vec2(t * 0.04, t * 0.02);
+          float w = fbm(p + fbm(p + t * 0.03));
+          vec3 col = mix(vec3(0.03, 0.05, 0.10), vec3(0.10, 0.55, 0.60), smoothstep(0.25, 0.75, w));
+          col = mix(col, vec3(0.55, 0.35, 0.95), smoothstep(0.55, 0.95, w) * 0.7);
+          col += vec3(0.9, 0.7, 0.4) * pow(smoothstep(0.7, 1.0, w), 3.0) * 0.5;
+          gl_FragColor = vec4(col, 1.0);
+        }`);
+      this.buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      this.locPos = gl.getAttribLocation(this.prog, 'pos');
+      this.locRes = gl.getUniformLocation(this.prog, 'res');
+      this.locT = gl.getUniformLocation(this.prog, 't');
+      this.locOct = gl.getUniformLocation(this.prog, 'oct');
+      this.oct = 1;
+      this.hook = (t) => this.draw(t);
+      frameHooks.add(this.hook);
+    },
+    setLevel(n) { this.oct = n; },
+    draw(t) {
+      const gl = this.gl, cv = this.cv;
+      gl.viewport(0, 0, cv.width, cv.height);
+      gl.useProgram(this.prog);
+      gl.uniform2f(this.locRes, cv.width, cv.height);
+      gl.uniform1f(this.locT, t / 1000);
+      gl.uniform1i(this.locOct, this.oct);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      gl.enableVertexAttribArray(this.locPos);
+      gl.vertexAttribPointer(this.locPos, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    },
+    unmount() { frameHooks.delete(this.hook); glDispose(this.gl, this.cv); },
+  },
+  {
+    id: 'photos', name: 'Zdjęcia z przenikaniem', unit: 'warstw',
+    levels: [1, 2, 3, 4, 6, 8, 10],
+    async mount(root) {
+      this.w = root.clientWidth; this.h = root.clientHeight;
+      this.box = el('div', 'scene-fill', root);
+      this.box.style.background = '#000';
+      if (!photoCache) {
+        photoCache = [];
+        for (let i = 0; i < 4; i++) photoCache.push(await makeLandscape(this.w, this.h, i));
+      }
+      const base = el('img', 'photo', this.box);
+      base.src = photoCache[0];
+      this.layers = [];
+    },
+    setLevel(n) {
+      while (this.layers.length < n) {
+        const i = this.layers.length, im = el('img', 'photo', this.box);
+        im.src = photoCache[(i + 1) % photoCache.length];
+        im.animate([{ transform: 'scale(1) translate(0px,0px)' }, { transform: `scale(${rnd(1.08, 1.22)}) translate(${rnd(-40, 40)}px,${rnd(-25, 25)}px)` }],
+          { duration: rnd(7000, 11000), iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' });
+        im.animate([{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }],
+          { duration: 6000, iterations: Infinity, delay: -i * 1300 });
+        this.layers.push(im);
+      }
+      while (this.layers.length > n) this.layers.pop().remove();
+    },
+    unmount() { this.box.remove(); this.layers = []; },
+  },
+  {
+    id: 'dom', name: 'Tekst i układ (DOM)', unit: 'kafelków',
+    levels: [50, 100, 200, 400, 800, 1600],
+    mount(root) {
+      this.w = root.clientWidth; this.h = root.clientHeight;
+      this.box = el('div', 'scene-fill dom-grid', root);
+      this.tiles = [];
+      this.hook = (t) => this.tick(t);
+      frameHooks.add(this.hook);
+    },
+    setLevel(n) {
+      this.box.textContent = '';
+      this.tiles = [];
+      const cols = Math.ceil(Math.sqrt(n * this.w / this.h)), rows = Math.ceil(n / cols);
+      this.box.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      this.box.style.gridAutoRows = `${Math.floor((this.h - 12) / rows) - 3}px`;
+      this.box.style.fontSize = Math.max(7, Math.min(20, (this.h / rows) * 0.32)) + 'px';
+      for (let i = 0; i < n; i++) {
+        const tile = el('div', 'tile-d', this.box);
+        this.tiles.push({ v: el('b', '', tile), bar: el('i', '', tile), ph: Math.random() * 6.28, sp: rnd(0.5, 3) });
+      }
+    },
+    tick(t) {
+      const s = t / 1000;
+      for (const x of this.tiles) {
+        const val = (Math.sin(s * x.sp + x.ph) * 0.5 + 0.5) * 100;
+        x.v.textContent = val.toFixed(1);
+        x.bar.style.width = val.toFixed(1) + '%';
+      }
+    },
+    unmount() { frameHooks.delete(this.hook); this.box.remove(); },
+  },
+];
+
+// ---------- Stress runner ----------
+const LEVEL_MS = 2600, WARM_MS = 700;
+let running = null;
+
+function fmtN(n) { return n >= 1000000 ? (n / 1000000) + ' mln' : n >= 1000 ? (n / 1000) + ' tys.' : String(n); }
+function passes(r) { return r.fps >= minFps && r.p95 <= maxP95; }
+
+async function runScenario(sc, onLevel) {
+  const host = $('stressScene');
+  const out = { id: sc.id, name: sc.name, unit: sc.unit, levels: [], max: 0, error: null };
+  try {
+    await sc.mount(host);
+    for (const [li, n] of sc.levels.entries()) {
+      if (running.cancelled) break;
+      await sc.setLevel(n);
+      onLevel(li, n, null);
+      await sleep(WARM_MS);
+      collector = [];
+      await sleep(LEVEL_MS - WARM_MS);
+      const s = stats(collector);
+      collector = null;
+      const r = { n, fps: +s.fps.toFixed(1), p95: +s.p95.toFixed(1), over: +(s.over * 100).toFixed(1) };
+      out.levels.push(r);
+      onLevel(li, n, r);
+      if (!passes(r)) break;
+      out.max = n;
+    }
+  } catch (e) {
+    out.error = String(e.message || e);
+    console.error(e);
+  }
+  try { sc.unmount(); } catch (e) { /* already gone */ }
+  host.textContent = '';
+  return out;
+}
+
+async function runAll() {
+  if (running) return;
+  running = { cancelled: false };
+  setNavEnabled(false);
+  $('stressIntro').classList.add('hidden');
+  $('runInfo').classList.remove('hidden');
+  const total = Scenes.reduce((a, s) => a + s.levels.length, 0);
+  let done = 0;
+  const results = [];
+  for (const sc of Scenes) {
+    if (running.cancelled) break;
+    $('runName').textContent = `${results.length + 1}/${Scenes.length} · ${sc.name}`;
+    const res = await runScenario(sc, (li, n, r) => {
+      const status = r ? ` · ${r.fps} FPS, p95 ${r.p95} ms ${passes(r) ? '✓' : '✗'}` : ' · pomiar…';
+      $('runLevel').textContent = `${fmtN(n)} ${sc.unit}${status}`;
+      if (r) { done++; $('runProg').style.width = (done / total * 100) + '%'; }
+    });
+    done += sc.levels.length - res.levels.length;
+    results.push(res);
+  }
+  const summary = { refreshHz, minFps, maxP95, cancelled: running.cancelled, scenes: results };
+  if (!running.cancelled) {
+    store('stressResult', summary);
+    report('STRESS_RESULT', summary);
+  }
+  running = null;
+  setNavEnabled(true);
+  $('runInfo').classList.add('hidden');
+  $('stressIntro').classList.remove('hidden');
+  renderStressTable(summary.cancelled ? load('stressResult') : summary);
+}
+
+function renderStressTable(summary) {
+  if (!summary || !summary.scenes) { $('stressTable').innerHTML = ''; return; }
+  const rows = summary.scenes.map((s) => {
+    const sc = Scenes.find((x) => x.id === s.id);
+    const passed = s.levels.filter(passes).length;
+    const share = sc ? passed / sc.levels.length : 0;
+    const atMax = s.levels.filter(passes).pop();
+    const fail = s.levels.find((r) => !passes(r));
+    const maxText = s.error ? `<span class="bad">błąd: ${s.error}</span>`
+      : s.max ? `<b>${fmtN(s.max)}</b> ${s.unit}${passed === (sc ? sc.levels.length : 0) ? ' <span class="good">(wszystkie poziomy)</span>' : ''}`
+      : `<span class="bad">poniżej ${fmtN(sc ? sc.levels[0] : 0)}</span>`;
+    return `<tr>
+      <td class="name">${s.name}</td>
+      <td>${maxText}</td>
+      <td><div class="meter"><i style="width:${share * 100}%"></i></div></td>
+      <td>${atMax ? `${atMax.fps} FPS · p95 ${atMax.p95} ms` : '–'}</td>
+      <td class="muted">${fail ? `${fmtN(fail.n)}: <span class="${fail.fps >= 30 ? 'warn' : 'bad'}">${fail.fps} FPS · p95 ${fail.p95} ms</span>` : '–'}</td>
+    </tr>`;
+  }).join('');
+  $('stressTable').innerHTML = `<table>
+    <tr><th>Scena</th><th>Największe płynne obciążenie</th><th>Zakres</th><th>Przy tym obciążeniu</th><th>Pierwszy poziom bez płynności</th></tr>
+    ${rows}</table>`;
+}
+
+// ---------- Play ----------
+const Play = { scene: null, level: 0, busy: false };
+async function playSelect(sc) {
+  if (Play.busy) return;
+  Play.busy = true;
+  if (Play.scene) { try { Play.scene.unmount(); } catch (e) { /* ignore */ } }
+  $('playScene').textContent = '';
+  document.querySelectorAll('.scene-btn').forEach((b) => b.classList.toggle('on', b.dataset.id === sc.id));
+  $('playEmpty').classList.add('hidden');
+  Play.scene = sc;
+  Play.level = 0;
+  try {
+    await sc.mount($('playScene'));
+    await sc.setLevel(sc.levels[0]);
+  } catch (e) {
+    $('playEmpty').textContent = 'Błąd sceny: ' + e.message;
+    $('playEmpty').classList.remove('hidden');
+  }
+  playLevelText();
+  Play.busy = false;
+}
+async function playStep(delta) {
+  const sc = Play.scene;
+  if (!sc || Play.busy) return;
+  const next = Math.max(0, Math.min(sc.levels.length - 1, Play.level + delta));
+  if (next === Play.level) return;
+  Play.busy = true;
+  Play.level = next;
+  await sc.setLevel(sc.levels[next]);
+  playLevelText();
+  Play.busy = false;
+}
+function playLevelText() {
+  const sc = Play.scene;
+  $('lvlValue').textContent = sc ? fmtN(sc.levels[Play.level]) : '–';
+  $('lvlUnit').textContent = sc ? `${sc.unit} · poziom ${Play.level + 1}/${sc.levels.length}` : 'poziom';
+}
+function playStop() {
+  if (Play.scene) { try { Play.scene.unmount(); } catch (e) { /* ignore */ } }
+  Play.scene = null;
+  $('playScene').textContent = '';
+  document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('on'));
+  $('playEmpty').classList.remove('hidden');
+  playLevelText();
+}
+
+// ---------- Home background and facts ----------
+function homeBackground() {
+  const host = $('homeBg');
+  const w = host.clientWidth || 1280, h = host.clientHeight || 660;
+  [[210, 520], [270, 460], [320, 380]].forEach(([hue, s], i) => {
+    const b = el('div', 'glow', host);
+    b.style.cssText = `width:${s}px;height:${s}px;left:${w * (0.15 + i * 0.3)}px;top:${h * (0.1 + (i % 2) * 0.35)}px;` +
+      `background:radial-gradient(circle,hsla(${hue},85%,55%,.45),hsla(${hue},85%,50%,0) 70%)`;
+    b.animate([{ transform: 'translate(0px,0px)' }, { transform: `translate(${rnd(-160, 160)}px,${rnd(-90, 90)}px)` }],
+      { duration: rnd(7000, 11000), iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' });
+  });
+}
+function webglInfo() {
+  // WebKit hides the real GPU name ("Apple GPU"), so report what WebGL can do instead.
+  try {
+    const c = document.createElement('canvas'), gl = c.getContext('webgl');
+    if (!gl) return { text: 'niedostępny', bad: true };
+    const text = `dostępny · tekstury do ${gl.getParameter(gl.MAX_TEXTURE_SIZE)} px`;
+    const lose = gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+    return { text, bad: false };
+  } catch (e) {
+    return { text: 'błąd: ' + e.message, bad: true };
+  }
+}
+function renderFacts() {
+  const ua = navigator.userAgent;
+  const wk = ua.match(/AppleWebKit\/([\d.]+)/);
+  const engine = /Chrome\//.test(ua) ? 'Chromium' : wk ? `WebKit ${wk[1]}` : 'inny';
+  const webgl = webglInfo();
+  const touch = navigator.maxTouchPoints ? `do ${navigator.maxTouchPoints} punktów`
+    : ('ontouchstart' in window ? 'zdarzenia dotyku obsługiwane' : 'brak zdarzeń dotyku');
+  const facts = [
+    ['Silnik', engine, false],
+    ['WebGL', webgl.text, webgl.bad],
+    ['Ekran', `${window.innerWidth}×${window.innerHeight} · ${refreshHz} Hz`, false],
+    ['Dotyk', touch, false],
+  ];
+  $('facts').innerHTML = facts.map(([k, v, warn]) => `<div class="fact"><span>${k}</span><b class="${warn ? 'warn' : ''}">${v}</b></div>`).join('');
+  report('DEVICE', { engine, webgl: webgl.text, screen: `${window.innerWidth}x${window.innerHeight}`, refreshHz, touch, ua });
+}
+
+// ---------- Navigation ----------
+let current = 'home';
+function setNavEnabled(on) { document.querySelectorAll('nav button').forEach((b) => { b.disabled = !on; }); }
+function go(name) {
+  if (running || name === current) return;
+  if (current === 'play') playStop();
+  current = name;
+  document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === name));
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.go === name));
+  if (name === 'touch') renderTouchLast();
+  if (name === 'stress') renderStressTable(load('stressResult'));
+}
+document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
+
+$('openFree').addEventListener('click', () => Free.open());
+$('freeClose').addEventListener('click', () => Free.close());
+$('freeClear').addEventListener('click', () => Free.clear());
+onPoints($('cvFree'), { down: Free.down, move: Free.move, up: Free.up });
+
+$('openAim').addEventListener('click', () => Aim.open());
+$('aimCancel').addEventListener('click', () => Aim.close());
+$('aimAgain').addEventListener('click', () => Aim.open());
+$('aimDone').addEventListener('click', () => Aim.close());
+onPoints($('cvAim'), { down: Aim.down, move() {}, up() {} });
+
+$('runAll').addEventListener('click', () => runAll());
+$('runCancel').addEventListener('click', () => { if (running) running.cancelled = true; });
+
+$('sceneChips').innerHTML = Scenes.map((s) => `<span class="chip">${s.name}</span>`).join('');
+Scenes.forEach((sc) => {
+  const b = el('button', 'scene-btn', $('playList'));
+  b.dataset.id = sc.id;
+  b.textContent = sc.name;
+  b.addEventListener('click', () => playSelect(sc));
+});
+$('lvlDown').addEventListener('click', () => playStep(-1));
+$('lvlUp').addEventListener('click', () => playStep(1));
+$('playHide').addEventListener('click', () => { $('playPanel').classList.add('hidden'); $('playShow').classList.remove('hidden'); });
+$('playShow').addEventListener('click', () => { $('playPanel').classList.remove('hidden'); $('playShow').classList.add('hidden'); });
+
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ---------- Start ----------
+(async function start() {
+  homeBackground();
+  // Measure the refresh rate from the middle half of 2.5 s of idle frames;
+  // the first frames after loading are uneven.
+  await sleep(2500);
+  const idle = recent(120).sort((a, b) => a - b);
+  const mid = idle.slice(Math.floor(idle.length * 0.25), Math.ceil(idle.length * 0.75));
+  const frame = mid.length ? mid.reduce((a, b) => a + b, 0) / mid.length : 16.7;
+  setThresholds(Math.max(30, Math.min(144, Math.round(1000 / frame))));
+  renderFacts();
+  const params = new URLSearchParams(location.search);
+  const auto = params.get('auto');
+  if (auto === 'stress') { go('stress'); runAll(); }
+  else if (auto === 'touch') go('touch');
+  else if (auto === 'aim') { go('touch'); Aim.open(); }
+  else if (params.get('screen')) go(params.get('screen'));
+})();
+</script>
+</body>
+</html>

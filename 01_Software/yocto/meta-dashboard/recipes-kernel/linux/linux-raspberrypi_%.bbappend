@@ -1,2 +1,2 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
-SRC_URI += "file://backlight.cfg"
+SRC_URI += "file://backlight.cfg file://cpu-governor.cfg"

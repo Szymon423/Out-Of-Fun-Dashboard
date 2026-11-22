@@ -1,4 +1,4 @@
-SUMMARY = "Starts Cog full screen in Weston on boot"
+SUMMARY = "Starts the dashboard launcher full screen in Weston on boot"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
@@ -15,4 +15,4 @@ do_install() {
 
 SYSTEMD_SERVICE:${PN} = "dashboard-kiosk.service"
 CONFFILES:${PN} = "${sysconfdir}/default/dashboard-kiosk"
-RDEPENDS:${PN} = "cog weston-init"
+RDEPENDS:${PN} = "dashboard-launcher weston-init"

@@ -15,6 +15,6 @@ IMAGE_INSTALL = " \
 	tzdata \
 "
 
-# Weston kiosk with Cog showing the benchmark page.
+# Weston kiosk with the WPE launcher showing the benchmark page.
 IMAGE_FEATURES += "weston"
 IMAGE_INSTALL += "dashboard-kiosk dashboard-spike ttf-dejavu-sans ttf-dejavu-sans-mono bash"

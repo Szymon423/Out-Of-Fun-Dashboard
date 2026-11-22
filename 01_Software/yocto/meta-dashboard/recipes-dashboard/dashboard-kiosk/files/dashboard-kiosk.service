@@ -1,5 +1,5 @@
 [Unit]
-Description=Dashboard kiosk (Cog in Weston)
+Description=Dashboard kiosk (WPE WebKit in Weston)
 Requires=weston.service
 After=weston.service
 # Restarting Weston restarts the kiosk too.
@@ -11,10 +11,9 @@ Group=weston
 EnvironmentFile=/etc/default/dashboard-kiosk
 Environment=WAYLAND_DISPLAY=/run/wayland-0
 Environment=XDG_RUNTIME_DIR=/run/dashboard-kiosk
-Environment=COG_PLATFORM_WL_VIEW_FULLSCREEN=1
 RuntimeDirectory=dashboard-kiosk
 RuntimeDirectoryMode=0700
-ExecStart=/usr/bin/cog --platform=wl ${DASHBOARD_URL}
+ExecStart=/usr/bin/dashboard-launcher ${DASHBOARD_URL}
 Restart=always
 RestartSec=2
 
