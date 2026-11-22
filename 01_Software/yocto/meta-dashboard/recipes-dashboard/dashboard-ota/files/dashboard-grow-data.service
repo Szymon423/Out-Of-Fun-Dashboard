@@ -1,0 +1,14 @@
+[Unit]
+Description=Grow the data partition to the end of the SD card
+DefaultDependencies=no
+Requires=dev-mmcblk0p4.device
+After=dev-mmcblk0p4.device
+Before=systemd-fsck@dev-mmcblk0p4.service data.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/dashboard-grow-data
+
+[Install]
+WantedBy=data.mount

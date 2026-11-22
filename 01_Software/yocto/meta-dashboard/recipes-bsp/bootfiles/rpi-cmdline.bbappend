@@ -2,3 +2,6 @@
 # kernel follows stdout-path in the device tree to the UART: 115200 baud slowed the
 # boot by about 4 s and systemd started a login getty on ttyS0.
 CMDLINE:append = " console=tty1"
+
+# No root= here: boot.scr adds root= for the slot it boots, together with rauc.slot=.
+CMDLINE_ROOTFS = "rootfstype=ext4 rootwait"

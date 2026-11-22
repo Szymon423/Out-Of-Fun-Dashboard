@@ -1,0 +1,16 @@
+# Out Of Fun Dashboard SD card for RAUC A/B updates (docs/ota-rauc.md):
+#   0-1 MiB     MBR
+#   1-4 MiB     U-Boot environment in raw sectors, two copies, no partition
+#   4-260 MiB   region for RAUC boot-mbr-switch: p1 is one half, the next
+#               update of the boot partition is written to the other half
+#   p2, p3      rootfs slots A and B, B starts as a copy of A
+#   p4          /data, grown to the end of the card on first boot
+# Boot and data have no mount point here on purpose: wic would add them only to
+# the fstab of this image, while an update bundle carries the rootfs from the
+# build. The fstab with both comes from base-files instead.
+# Data uses "-T default": at 256 MiB mke2fs would pick the "small" profile with
+# 1 KiB blocks, which stays after growing to the size of the card.
+part --source bootimg-partition --ondisk mmcblk0 --fstype=vfat --label boot --active --offset 4M --fixed-size 128M
+part / --source rootfs --ondisk mmcblk0 --fstype=ext4 --label rootfs_a --offset 260M --fixed-size 2048M
+part / --source rootfs --ondisk mmcblk0 --fstype=ext4 --label rootfs_b --offset 2308M --fixed-size 2048M
+part --ondisk mmcblk0 --fstype=ext4 --label data --offset 4356M --fixed-size 256M --mkfs-extraopts "-T default"

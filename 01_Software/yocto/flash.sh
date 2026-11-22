@@ -12,6 +12,12 @@ DEFAULT_IMAGE=dashboard-image
 MAX_SIZE_BYTES=$(( 256 * 1000 ** 3 ))
 WAIT_SECONDS=${WAIT_SECONDS:-120}
 DRY_RUN=0
+# U-Boot keeps its environment in raw sectors between 1 and 4 MiB, outside any partition
+# (meta-dashboard/recipes-bsp/u-boot/files/env-in-mmc.cfg). bmaptool skips that area because
+# it is empty in the image, so values saved by the previous system (bootcmd, BOOT_ORDER...)
+# would survive and override the defaults of the new U-Boot.
+UBOOT_ENV_START_MIB=1
+UBOOT_ENV_END_MIB=4
 
 die() { echo "PRZERWANO: $*" >&2; exit 1; }
 
@@ -91,6 +97,26 @@ unmount_all() {
   done < <(lsblk -nlpo NAME,MOUNTPOINT "$1")
 }
 
+# Zeroes the U-Boot environment area, but only when the first partition of the image just
+# written starts at or after its end, so no partition can be hit.
+clear_uboot_env() {
+  local dev=$1 first start_sector
+  if (( DRY_RUN )); then
+    echo "[próba] zerowanie zmiennych U-Boota: ${UBOOT_ENV_START_MIB}–${UBOOT_ENV_END_MIB} MiB"
+    return
+  fi
+  first=$(lsblk -nlpo NAME,TYPE "$dev" | awk '$2 == "part" { print $1; exit }')
+  [[ -n $first ]] || die "obraz nie ma partycji, nie zeruję zmiennych U-Boota."
+  start_sector=$(cat "/sys/class/block/${first##*/}/start")
+  if (( start_sector * 512 < UBOOT_ENV_END_MIB * 1024 * 1024 )); then
+    echo "UWAGA: ${first##*/} zaczyna się przed ${UBOOT_ENV_END_MIB} MiB, zostawiam zmienne U-Boota bez zmian." >&2
+    return
+  fi
+  sudo dd if=/dev/zero of="$dev" bs=1M seek="$UBOOT_ENV_START_MIB" \
+    count=$(( UBOOT_ENV_END_MIB - UBOOT_ENV_START_MIB )) conv=fsync status=none
+  echo "Wyzerowano zmienne U-Boota (${UBOOT_ENV_START_MIB}–${UBOOT_ENV_END_MIB} MiB), U-Boot użyje wartości domyślnych."
+}
+
 main() {
   local device="" opt image deploy img bmap dev answer
   while getopts ":nd:h" opt; do
@@ -139,8 +165,9 @@ main() {
   run sudo bmaptool copy --bmap "$bmap" "$img" "$dev"
   run sync
   run sudo blockdev --rereadpt "$dev" || true
+  (( DRY_RUN )) || udevadm settle
+  clear_uboot_env "$dev"
   if (( ! DRY_RUN )); then
-    udevadm settle
     echo
     lsblk -o NAME,SIZE,FSTYPE,LABEL "$dev"
     # The desktop may mount the new partitions right away.

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Grows the data partition (mmcblk0p4) to the end of the SD card. The image has it at
+# 256 MiB because wic does not know the card size. Runs before /data is mounted; the
+# file system is then grown by x-systemd.growfs in fstab. The MBR is written only when
+# there is something to gain, so later boots change nothing.
+set -eu
+
+disk_sectors=$(cat /sys/class/block/mmcblk0/size)
+start=$(cat /sys/class/block/mmcblk0p4/start)
+size=$(cat /sys/class/block/mmcblk0p4/size)
+free=$(( disk_sectors - start - size ))
+
+# 32768 sectors of 512 bytes = 16 MiB.
+if [ "$free" -lt 32768 ]; then
+    exit 0
+fi
+echo "Growing mmcblk0p4 by $(( free / 2048 )) MiB"
+parted --script /dev/mmcblk0 resizepart 4 100%
