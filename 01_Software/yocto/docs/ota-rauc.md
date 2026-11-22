@@ -205,8 +205,54 @@ Jeśli stary klucz zginął albo wyciekł, pakietu przejściowego nie da się be
   - wydajność bez zmian (`ONLY=cv-rect,dom-both,dom-layer spike/diag.sh base`), bo `enable_uart` może zablokować taktowanie rdzenia VPU;
   - czas od włączenia zasilania do strony kiosku, mierzony stoperem przed zmianą i po niej.
 
+#### Wyniki OTA-1 (22.11.2026)
+
+U-Boot 2026.01 działa, a zmienne są zapisywane na karcie i przetrwają odłączenie zasilania. Pierwsza wersja wydłużyła start o 11 s. Mierzone stoperem od włączenia zasilania:
+
+| Wariant | Logi kernela | Dashboard |
+|---|---|---|
+| bez U-Boota | 12 s | 17 s |
+| U-Boot z domyślną konfiguracją | – | 28 s |
+| + `console=tty1` | 18 s | 23 s |
+| + bez `preboot` (`pci enum; usb start`) | 16 s | 20 s |
+| + `Image.gz` zamiast `Image` | 13 s | 18 s |
+
+Przyczyny i poprawki:
+- **Konsola na UART.**
+  - Przyczyna: `enable_uart=1` włącza port szeregowy, a device tree ma `stdout-path = "serial0:115200n8"`. Bez `console=` w `cmdline.txt` kernel uznaje UART za główną konsolę. Log kernela i komunikaty systemd szły z prędkością 115200 bodów, a systemd uruchamiał getty na `ttyS0`.
+  - Poprawka: `console=tty1` w `rpi-cmdline.bbappend`.
+- **`preboot`.**
+  - Przyczyna: domyślne `pci enum; usb start` kosztowało około 2.5 s.
+  - Poprawka: `# CONFIG_USE_PREBOOT is not set` w `autoboot.cfg`.
+- **Wolny odczyt karty w U-Boocie.**
+  - Pomiar `bootstage`: U-Boot czyta kartę z prędkością 4.8 MB/s, więc 27 MB kernela szło 5.6 s. Linux czyta tę samą kartę w trybie DDR50.
+  - Poprawka: `KERNEL_IMAGETYPE_UBOOT = "Image.gz"`. Kernel ma 10.9 MB, wczytuje się w 2.3 s i rozpakowuje w 0.3 s.
+
+Czasy w samym U-Boocie (`bootstage`) po poprawkach:
+
+| Etap | Czas |
+|---|---|
+| inicjalizacja | 0.64 s |
+| `bootflow scan` | 0.24 s |
+| wczytanie `Image.gz` | 2.27 s |
+| rozpakowanie | 0.28 s |
+| **razem** | **3.57 s** |
+
+Linux startuje w 5.3 s (wcześniej 6.8 s, bo konsola nie idzie już na UART). Sumarycznie start jest dłuższy o około 1 s niż bez U-Boota.
+
+Wnioski na następne etapy:
+- **Pomiar czasu.** `bootstage.cfg` (`CONFIG_BOOTSTAGE`, `CONFIG_BOOTSTAGE_FDT`) zostaje. Czasy U-Boota odczytuje się w Linuksie z `/proc/device-tree/bootstage/`.
+- **Zmienne zapisane na karcie wygrywają z wartościami wbudowanymi w U-Boota.**
+  - Dotyczy to m.in. `bootcmd`, `preboot` i `bootdelay`.
+  - `bmaptool` nie nadpisuje obszaru 1–4 MiB, więc zmienne przetrwają też flashowanie nowego obrazu.
+  - Dlatego w OTA-2 `flash.sh` zeruje ten obszar przy każdym pełnym flashowaniu.
+  - Ustawienia, które mają działać mimo zapisanych zmiennych, wyłączamy w konfiguracji U-Boota, tak jak `USE_PREBOOT`.
+- **`libubootenv`.** `fw_setenv nazwa` bez wartości zostawia pustą zmienną (`test=`), zamiast ją usunąć.
+
 ### OTA-2: Układ A/B i RAUC (ostatnie flashowanie)
 - Plik `.wks` z nowym układem, `boot.cmd.in` z logiką slotów i `system.conf`.
+- `flash.sh` zeruje obszar zmiennych U-Boota (1–4 MiB) przed zapisem obrazu, więc po pełnym flashowaniu obowiązują wartości domyślne z nowego U-Boota.
+- `boot.cmd.in` wczytuje `boot/Image.gz` z rootfs wybranego slotu (`load mmc 0:<partycja>`) i zapisuje zmienne tylko wtedy, gdy zmienia licznik prób.
 - `DISTRO_FEATURES:append = " rauc"` w `dashboard.conf`.
   - Od wrynose `rauc-conf` instaluje `system.conf` i keyring do `/usr/lib/rauc/`.
   - `rauc` trafia do obrazu przez `packagegroup-base`.
@@ -246,6 +292,11 @@ Jeśli stary klucz zginął albo wyciekł, pakietu przejściowego nie da się be
 
 ### OTA-6: Rootfs tylko do odczytu (później)
 - Włączyć `IMAGE_FEATURES += "read-only-rootfs"` i montować sloty ext4 tylko do odczytu. Opcjonalnie przejść na squashfs albo erofs, co da mniejsze pakiety.
+  - squashfs albo erofs to skompresowany system plików tylko do odczytu. Pakiet RAUC i sloty byłyby około dwa razy mniejsze, a z `dm-verity` mamy też kontrolę integralności.
+  - U-Boot potrafi wczytać kernel wprost z takiego slotu (`sqfsload`, `CONFIG_FS_SQUASHFS`; erofs: `CONFIG_FS_EROFS`). Wtedy kernel leży w nim nieskompresowany, a kompresję robi system plików.
+  - Czas startu prawie się nie zmieni. W U-Boocie liczy się liczba wczytanych bajtów (karta czyta tam z prędkością 4.8 MB/s), a to wychodzi podobnie jak `Image.gz`. Linux czyta kartę szybko, w trybie DDR50.
+  - Rozmiary kernela 6.18 (22.11.2026): `Image` 27.1 MB, `gzip -9` 10.9 MB, `zstd -19` 9.1 MB, `xz -9` 7.8 MB.
+  - `zstd` dałby około 0.5 s krócej niż `gzip`, ale wymaga `CONFIG_ZSTD` w U-Boocie. `xz` jest najmniejszy, ale U-Boot rozpakowuje go wolno i nie obsługuje formatu `.xz`.
 - Spisać stan, który musi być zapisywalny, i przenieść go na `/data` albo do tmpfs:
   - `/var/lib/systemd`: zegar `timesyncd`, podświetlenie, ziarno losowości;
   - `machine-id`;
