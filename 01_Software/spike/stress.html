@@ -161,6 +161,11 @@ td.name { font-weight: 600; }
 .tile-d { background: #141c2e; border-radius: 6px; padding: 4px 6px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
 .tile-d b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile-d i { display: block; height: 3px; margin-top: 3px; background: var(--accent); border-radius: 2px; }
+.dom-grid.noclip .tile-d { overflow: visible; }
+.dom-grid.contain .tile-d { contain: strict; }
+.dom-grid.plain .tile-d b { font-weight: 400; font-variant-numeric: normal; }
+.dom-grid.xform .tile-d i { width: 100%; transform-origin: 0 50%; }
+.dom-grid.layer .tile-d i { will-change: transform; }
 </style>
 </head>
 <body>
@@ -311,7 +316,7 @@ function load(key) {
   try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
 }
 function report(tag, data) {
-  // Cog writes console messages to the journal (--enable-write-console-messages-to-stdout).
+  // The launcher writes console messages to stdout, so they end up in the journal.
   console.log(tag + ' ' + JSON.stringify(data));
 }
 function stats(arr) {
@@ -331,6 +336,8 @@ const RING = 600;
 const ring = new Float32Array(RING);
 let ringIdx = 0, ringCount = 0;
 let collector = null;
+// Time spent in the frame hooks (scene JS, plus forced style and layout in the diagnostic scenes).
+let jsCollector = null;
 const frameHooks = new Set();
 let lastT = performance.now();
 
@@ -349,9 +356,11 @@ function loop(t) {
     if (ringCount < RING) ringCount++;
     if (collector) collector.push(d);
   }
+  const h0 = performance.now();
   for (const hook of frameHooks) {
     try { hook(t, d); } catch (e) { console.error(e); frameHooks.delete(hook); }
   }
+  if (jsCollector) jsCollector.push(performance.now() - h0);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -753,6 +762,135 @@ async function makeLandscape(w, h, seed) {
   return blob ? URL.createObjectURL(blob) : c.toDataURL('image/jpeg', 0.9);
 }
 
+// ---------- Canvas 2D and DOM scene factories ----------
+const DIAG_MIN_FPS = 20;
+
+// A 16 px glow in the top left corner of a size×size canvas.
+function makeGlowSprite(size) {
+  const s = document.createElement('canvas');
+  s.width = s.height = size;
+  const g = s.getContext('2d'), gr = g.createRadialGradient(8, 8, 0, 8, 8, 8);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.3, 'rgba(140,190,255,.85)');
+  gr.addColorStop(1, 'rgba(90,120,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 16, 16);
+  return s;
+}
+
+// WebKit draws canvases under 128×129 px in software. Drawing such a canvas onto an
+// accelerated one can mean a GPU upload on every drawImage call; the other sources show
+// whether that is what makes the Canvas 2D scene slow.
+async function spriteSource(kind) {
+  if (kind === 'rect') return null;
+  if (kind === 'atlas') return makeGlowSprite(256);
+  const small = makeGlowSprite(16);
+  if (kind === 'bitmap') return createImageBitmap(small);
+  if (kind === 'img') {
+    const img = new Image();
+    img.src = small.toDataURL('image/png');
+    await img.decode();
+    return img;
+  }
+  return small;
+}
+
+// Particles pulled towards a moving point, drawn as 8 px glows on a fading background.
+function canvasScene(id, name, kind, levels, diag = false) {
+  return {
+    id, name, unit: 'cząstek', levels, diag,
+    async mount(root) {
+      this.w = root.clientWidth; this.h = root.clientHeight;
+      this.cv = el('canvas', 'scene-fill', root);
+      this.cv.width = this.w; this.cv.height = this.h;
+      this.ctx = this.cv.getContext('2d');
+      this.sprite = await spriteSource(kind);
+      this.n = 0;
+      this.hook = (t) => this.draw(t);
+      frameHooks.add(this.hook);
+    },
+    setLevel(n) {
+      const px = new Float32Array(n), py = new Float32Array(n), vx = new Float32Array(n), vy = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        px[i] = Math.random() * this.w; py[i] = Math.random() * this.h;
+        const a = Math.random() * 6.283, sp = rnd(0.3, 1.6);
+        vx[i] = Math.cos(a) * sp; vy[i] = Math.sin(a) * sp;
+      }
+      Object.assign(this, { n, px, py, vx, vy });
+    },
+    draw(t) {
+      const { ctx, w, h, n, px, py, vx, vy, sprite } = this;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(8,11,20,.35)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'lighter';
+      if (kind === 'rect') ctx.fillStyle = 'rgba(140,190,255,.6)';
+      const cx = w / 2 + Math.cos(t / 1300) * w * 0.3, cy = h / 2 + Math.sin(t / 1700) * h * 0.3;
+      for (let i = 0; i < n; i++) {
+        let x = px[i], y = py[i];
+        const dx = cx - x, dy = cy - y, f = 40 / (dx * dx + dy * dy + 900);
+        vx[i] = (vx[i] + dx * f) * 0.996;
+        vy[i] = (vy[i] + dy * f) * 0.996;
+        x += vx[i]; y += vy[i];
+        if (x < 0) x += w; else if (x >= w) x -= w;
+        if (y < 0) y += h; else if (y >= h) y -= h;
+        px[i] = x; py[i] = y;
+        if (kind === 'rect') ctx.fillRect(x - 4, y - 4, 8, 8);
+        else if (kind === 'atlas') ctx.drawImage(sprite, 0, 0, 16, 16, x - 4, y - 4, 8, 8);
+        else ctx.drawImage(sprite, x - 4, y - 4, 8, 8);
+      }
+    },
+    unmount() {
+      frameHooks.delete(this.hook);
+      this.cv.remove();
+      if (this.sprite && this.sprite.close) this.sprite.close();
+    },
+  };
+}
+
+// Grid of tiles with a number and a bar, updated every frame.
+// opts.text: update the number (default true); opts.bar: 'width', 'scale' or none;
+// opts.cls: extra classes on the grid; opts.diag: diagnostic run, which also forces style and
+// layout inside the frame hook so the JS time includes them.
+function domScene(id, name, opts, levels) {
+  return {
+    id, name, unit: 'kafelków', levels, diag: !!opts.diag,
+    mount(root) {
+      this.w = root.clientWidth; this.h = root.clientHeight;
+      this.box = el('div', 'scene-fill dom-grid ' + (opts.cls || ''), root);
+      this.tiles = [];
+      this.hook = (t) => this.tick(t);
+      frameHooks.add(this.hook);
+    },
+    setLevel(n) {
+      this.box.textContent = '';
+      this.tiles = [];
+      const cols = Math.ceil(Math.sqrt(n * this.w / this.h)), rows = Math.ceil(n / cols);
+      this.box.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      this.box.style.gridAutoRows = `${Math.floor((this.h - 12) / rows) - 3}px`;
+      this.box.style.fontSize = Math.max(7, Math.min(20, (this.h / rows) * 0.32)) + 'px';
+      for (let i = 0; i < n; i++) {
+        const tile = el('div', 'tile-d', this.box);
+        const v = el('b', '', tile), bar = el('i', '', tile);
+        v.textContent = (Math.random() * 100).toFixed(1);
+        if (!opts.bar) bar.style.width = '60%';
+        this.tiles.push({ v, bar, ph: Math.random() * 6.28, sp: rnd(0.5, 3) });
+      }
+    },
+    tick(t) {
+      const s = t / 1000;
+      for (const x of this.tiles) {
+        const val = (Math.sin(s * x.sp + x.ph) * 0.5 + 0.5) * 100;
+        if (opts.text !== false) x.v.textContent = val.toFixed(1);
+        if (opts.bar === 'width') x.bar.style.width = val.toFixed(1) + '%';
+        else if (opts.bar === 'scale') x.bar.style.transform = `scaleX(${(val / 100).toFixed(3)})`;
+      }
+      if (opts.diag) void this.box.offsetHeight;
+    },
+    unmount() { frameHooks.delete(this.hook); this.box.remove(); },
+  };
+}
+
 // ---------- Scenes ----------
 // Each scene: mount(root), setLevel(n), unmount(). Levels grow until the animation stops being smooth.
 const Scenes = [
@@ -806,57 +944,8 @@ const Scenes = [
     },
     unmount() { this.box.remove(); this.cards = []; },
   },
-  {
-    id: 'canvas', name: 'Canvas 2D', unit: 'cząstek',
-    levels: [1000, 2000, 4000, 8000, 16000, 32000, 64000],
-    mount(root) {
-      this.w = root.clientWidth; this.h = root.clientHeight;
-      this.cv = el('canvas', 'scene-fill', root);
-      this.cv.width = this.w; this.cv.height = this.h;
-      this.ctx = this.cv.getContext('2d');
-      const s = document.createElement('canvas');
-      s.width = s.height = 16;
-      const g = s.getContext('2d'), gr = g.createRadialGradient(8, 8, 0, 8, 8, 8);
-      gr.addColorStop(0, 'rgba(255,255,255,1)');
-      gr.addColorStop(0.3, 'rgba(140,190,255,.85)');
-      gr.addColorStop(1, 'rgba(90,120,255,0)');
-      g.fillStyle = gr;
-      g.fillRect(0, 0, 16, 16);
-      this.sprite = s;
-      this.n = 0;
-      this.hook = (t) => this.draw(t);
-      frameHooks.add(this.hook);
-    },
-    setLevel(n) {
-      const px = new Float32Array(n), py = new Float32Array(n), vx = new Float32Array(n), vy = new Float32Array(n);
-      for (let i = 0; i < n; i++) {
-        px[i] = Math.random() * this.w; py[i] = Math.random() * this.h;
-        const a = Math.random() * 6.283, sp = rnd(0.3, 1.6);
-        vx[i] = Math.cos(a) * sp; vy[i] = Math.sin(a) * sp;
-      }
-      Object.assign(this, { n, px, py, vx, vy });
-    },
-    draw(t) {
-      const { ctx, w, h, n, px, py, vx, vy, sprite } = this;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = 'rgba(8,11,20,.35)';
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalCompositeOperation = 'lighter';
-      const cx = w / 2 + Math.cos(t / 1300) * w * 0.3, cy = h / 2 + Math.sin(t / 1700) * h * 0.3;
-      for (let i = 0; i < n; i++) {
-        let x = px[i], y = py[i];
-        const dx = cx - x, dy = cy - y, f = 40 / (dx * dx + dy * dy + 900);
-        vx[i] = (vx[i] + dx * f) * 0.996;
-        vy[i] = (vy[i] + dy * f) * 0.996;
-        x += vx[i]; y += vy[i];
-        if (x < 0) x += w; else if (x >= w) x -= w;
-        if (y < 0) y += h; else if (y >= h) y -= h;
-        px[i] = x; py[i] = y;
-        ctx.drawImage(sprite, x - 4, y - 4, 8, 8);
-      }
-    },
-    unmount() { frameHooks.delete(this.hook); this.cv.remove(); },
-  },
+  // ImageBitmap sprite: a small canvas as the source is a known slow path (see the cv-* diagnostics).
+  canvasScene('canvas', 'Canvas 2D', 'bitmap', [250, 500, 1000, 2000, 4000, 8000, 16000]),
   {
     id: 'webgl', name: 'Cząstki WebGL', unit: 'cząstek',
     levels: [25000, 50000, 100000, 200000, 400000, 800000, 1600000],
@@ -1009,39 +1098,31 @@ const Scenes = [
     },
     unmount() { this.box.remove(); this.layers = []; },
   },
-  {
-    id: 'dom', name: 'Tekst i układ (DOM)', unit: 'kafelków',
-    levels: [50, 100, 200, 400, 800, 1600],
-    mount(root) {
-      this.w = root.clientWidth; this.h = root.clientHeight;
-      this.box = el('div', 'scene-fill dom-grid', root);
-      this.tiles = [];
-      this.hook = (t) => this.tick(t);
-      frameHooks.add(this.hook);
-    },
-    setLevel(n) {
-      this.box.textContent = '';
-      this.tiles = [];
-      const cols = Math.ceil(Math.sqrt(n * this.w / this.h)), rows = Math.ceil(n / cols);
-      this.box.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-      this.box.style.gridAutoRows = `${Math.floor((this.h - 12) / rows) - 3}px`;
-      this.box.style.fontSize = Math.max(7, Math.min(20, (this.h / rows) * 0.32)) + 'px';
-      for (let i = 0; i < n; i++) {
-        const tile = el('div', 'tile-d', this.box);
-        this.tiles.push({ v: el('b', '', tile), bar: el('i', '', tile), ph: Math.random() * 6.28, sp: rnd(0.5, 3) });
-      }
-    },
-    tick(t) {
-      const s = t / 1000;
-      for (const x of this.tiles) {
-        const val = (Math.sin(s * x.sp + x.ph) * 0.5 + 0.5) * 100;
-        x.v.textContent = val.toFixed(1);
-        x.bar.style.width = val.toFixed(1) + '%';
-      }
-    },
-    unmount() { frameHooks.delete(this.hook); this.box.remove(); },
-  },
+  domScene('dom', 'Tekst i układ (DOM)', { bar: 'width' }, [50, 100, 200, 400, 800, 1600]),
 ];
+
+// Diagnostic variants: each changes one thing against the Canvas 2D or DOM scene.
+// They keep going after the first level that is not smooth, until FPS drops below DIAG_MIN_FPS.
+// Run them with ?auto=diag, or pick some with ?auto=diag&only=cv-img,dom-text.
+const CANVAS_DIAG_LEVELS = [500, 1000, 2000, 4000, 8000, 16000, 32000];
+const DOM_DIAG_LEVELS = [50, 100, 200, 400, 800, 1600];
+const DiagScenes = [
+  canvasScene('cv-fade', 'Canvas: samo wygaszanie tła', 'rect', [0], true),
+  canvasScene('cv-canvas', 'Canvas: sprite z małego canvasa', 'canvas', CANVAS_DIAG_LEVELS, true),
+  canvasScene('cv-bitmap', 'Canvas: sprite z ImageBitmap', 'bitmap', CANVAS_DIAG_LEVELS, true),
+  canvasScene('cv-img', 'Canvas: sprite z obrazka (img)', 'img', CANVAS_DIAG_LEVELS, true),
+  canvasScene('cv-atlas', 'Canvas: sprite z dużego canvasa', 'atlas', CANVAS_DIAG_LEVELS, true),
+  canvasScene('cv-rect', 'Canvas: same prostokąty', 'rect', CANVAS_DIAG_LEVELS, true),
+  domScene('dom-both', 'DOM: tekst i szerokość paska', { bar: 'width', diag: true }, DOM_DIAG_LEVELS),
+  domScene('dom-text', 'DOM: tylko tekst', { diag: true }, DOM_DIAG_LEVELS),
+  domScene('dom-width', 'DOM: tylko szerokość paska', { text: false, bar: 'width', diag: true }, DOM_DIAG_LEVELS),
+  domScene('dom-noclip', 'DOM: bez przycinania do zaokrągleń', { bar: 'width', cls: 'noclip', diag: true }, DOM_DIAG_LEVELS),
+  domScene('dom-contain', 'DOM: kafelki z contain: strict', { bar: 'width', cls: 'contain', diag: true }, DOM_DIAG_LEVELS),
+  domScene('dom-plain', 'DOM: zwykła czcionka', { bar: 'width', cls: 'plain', diag: true }, DOM_DIAG_LEVELS),
+  domScene('dom-scale', 'DOM: pasek przez transform', { text: false, bar: 'scale', cls: 'xform', diag: true }, DOM_DIAG_LEVELS),
+  domScene('dom-layer', 'DOM: pasek jako osobna warstwa', { text: false, bar: 'scale', cls: 'xform layer', diag: true }, DOM_DIAG_LEVELS),
+];
+const AllScenes = Scenes.concat(DiagScenes);
 
 // ---------- Stress runner ----------
 const LEVEL_MS = 2600, WARM_MS = 700;
@@ -1061,14 +1142,17 @@ async function runScenario(sc, onLevel) {
       onLevel(li, n, null);
       await sleep(WARM_MS);
       collector = [];
+      jsCollector = [];
       await sleep(LEVEL_MS - WARM_MS);
       const s = stats(collector);
+      const js = jsCollector.length ? jsCollector.reduce((a, b) => a + b, 0) / jsCollector.length : 0;
       collector = null;
-      const r = { n, fps: +s.fps.toFixed(1), p95: +s.p95.toFixed(1), over: +(s.over * 100).toFixed(1) };
+      jsCollector = null;
+      const r = { n, fps: +s.fps.toFixed(1), p95: +s.p95.toFixed(1), over: +(s.over * 100).toFixed(1), js: +js.toFixed(1) };
       out.levels.push(r);
       onLevel(li, n, r);
-      if (!passes(r)) break;
-      out.max = n;
+      if (passes(r)) out.max = n;
+      else if (!sc.diag || r.fps < DIAG_MIN_FPS) break;
     }
   } catch (e) {
     out.error = String(e.message || e);
@@ -1079,18 +1163,18 @@ async function runScenario(sc, onLevel) {
   return out;
 }
 
-async function runAll() {
+async function runAll(list = Scenes, tag = 'STRESS_RESULT', key = 'stressResult') {
   if (running) return;
   running = { cancelled: false };
   setNavEnabled(false);
   $('stressIntro').classList.add('hidden');
   $('runInfo').classList.remove('hidden');
-  const total = Scenes.reduce((a, s) => a + s.levels.length, 0);
+  const total = list.reduce((a, s) => a + s.levels.length, 0);
   let done = 0;
   const results = [];
-  for (const sc of Scenes) {
+  for (const sc of list) {
     if (running.cancelled) break;
-    $('runName').textContent = `${results.length + 1}/${Scenes.length} · ${sc.name}`;
+    $('runName').textContent = `${results.length + 1}/${list.length} · ${sc.name}`;
     const res = await runScenario(sc, (li, n, r) => {
       const status = r ? ` · ${r.fps} FPS, p95 ${r.p95} ms ${passes(r) ? '✓' : '✗'}` : ' · pomiar…';
       $('runLevel').textContent = `${fmtN(n)} ${sc.unit}${status}`;
@@ -1098,23 +1182,24 @@ async function runAll() {
     });
     done += sc.levels.length - res.levels.length;
     results.push(res);
+    report('SCENE_RESULT', res);
   }
   const summary = { refreshHz, minFps, maxP95, cancelled: running.cancelled, scenes: results };
   if (!running.cancelled) {
-    store('stressResult', summary);
-    report('STRESS_RESULT', summary);
+    store(key, summary);
+    report(tag, summary);
   }
   running = null;
   setNavEnabled(true);
   $('runInfo').classList.add('hidden');
   $('stressIntro').classList.remove('hidden');
-  renderStressTable(summary.cancelled ? load('stressResult') : summary);
+  renderStressTable(summary.cancelled ? load(key) : summary);
 }
 
 function renderStressTable(summary) {
   if (!summary || !summary.scenes) { $('stressTable').innerHTML = ''; return; }
   const rows = summary.scenes.map((s) => {
-    const sc = Scenes.find((x) => x.id === s.id);
+    const sc = AllScenes.find((x) => x.id === s.id);
     const passed = s.levels.filter(passes).length;
     const share = sc ? passed / sc.levels.length : 0;
     const atMax = s.levels.filter(passes).pop();
@@ -1126,7 +1211,7 @@ function renderStressTable(summary) {
       <td class="name">${s.name}</td>
       <td>${maxText}</td>
       <td><div class="meter"><i style="width:${share * 100}%"></i></div></td>
-      <td>${atMax ? `${atMax.fps} FPS · p95 ${atMax.p95} ms` : '–'}</td>
+      <td>${atMax ? `${atMax.fps} FPS · p95 ${atMax.p95} ms${atMax.js != null ? ` · JS ${atMax.js} ms` : ''}` : '–'}</td>
       <td class="muted">${fail ? `${fmtN(fail.n)}: <span class="${fail.fps >= 30 ? 'warn' : 'bad'}">${fail.fps} FPS · p95 ${fail.p95} ms</span>` : '–'}</td>
     </tr>`;
   }).join('');
@@ -1279,6 +1364,11 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
   const params = new URLSearchParams(location.search);
   const auto = params.get('auto');
   if (auto === 'stress') { go('stress'); runAll(); }
+  else if (auto === 'diag') {
+    const only = (params.get('only') || '').split(',').filter(Boolean);
+    go('stress');
+    runAll(only.length ? AllScenes.filter((s) => only.includes(s.id)) : DiagScenes, 'DIAG_RESULT', 'diagResult');
+  }
   else if (auto === 'touch') go('touch');
   else if (auto === 'aim') { go('touch'); Aim.open(); }
   else if (params.get('screen')) go(params.get('screen'));
