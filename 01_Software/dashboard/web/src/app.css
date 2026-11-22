@@ -1,0 +1,126 @@
+/* Out Of Fun Dashboard: one fixed 1280x720 screen in WPE WebKit on the Pi.
+   Performance rules (docs/plan.md): animate only transform and opacity, no backdrop-filter,
+   no blurred box-shadow on anything big: WPE paints blur slowly on the Pi; a page full of
+   blurred card shadows made every swipe stall for 100-200 ms (measured with ?bench).
+   Colours follow Apple's system palette; data-theme on <html> picks light or dark. */
+:root {
+  --radius: 30px;
+  --radius-sm: 18px;
+  --gap: 20px;
+  --pad: 32px;
+  --ease: cubic-bezier(0.22, 0.9, 0.28, 1);
+  --clock-font: 'Inter Variable', sans-serif;
+  color-scheme: dark;
+}
+
+:root,
+:root[data-theme='dark'] {
+  --bg: #050608;
+  --page-bg: #0b0d12;
+  --card: rgba(28, 28, 32, 0.74);
+  --card-solid: #1c1c20;
+  --line: rgba(255, 255, 255, 0.07);
+  --fill: rgba(255, 255, 255, 0.07);
+  --fill-strong: rgba(255, 255, 255, 0.14);
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset; /* a hairline, no blur */
+  --text: #f5f5f7;
+  --muted: rgba(235, 235, 245, 0.62);
+  --faint: rgba(235, 235, 245, 0.34);
+  --accent: #ff9f0a;
+  --accent-soft: rgba(255, 159, 10, 0.16);
+  --accent-ink: #1f1300;
+  --cool: #0a84ff;
+  --cool-text: #64b5ff;
+  --good: #30d158;
+  --bad: #ff453a;
+  --red: #ff453a;
+  --tone-sun: #ffd60a;
+  --tone-night: #b4b9ff;
+  --tone-cloud: #c7ccd6;
+  --tone-rain: #64b5ff;
+  --tone-snow: #e6f1ff;
+  --tone-storm: #bf5af2;
+  --tone-fog: #aeb4bc;
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --bg: #e9ecf2;
+  --page-bg: #f2f3f7;
+  --card: rgba(255, 255, 255, 0.88);
+  --card-solid: #ffffff;
+  --line: rgba(0, 0, 0, 0.06);
+  --fill: rgba(60, 60, 67, 0.07);
+  --fill-strong: rgba(60, 60, 67, 0.14);
+  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.045) inset; /* a hairline, no blur */
+  --text: #1d1d1f;
+  --muted: rgba(60, 60, 67, 0.66);
+  --faint: rgba(60, 60, 67, 0.4);
+  --accent: #ff9500;
+  --accent-soft: rgba(255, 149, 0, 0.14);
+  --accent-ink: #ffffff;
+  --cool: #007aff;
+  --cool-text: #007aff;
+  --good: #28b04e;
+  --bad: #ff3b30;
+  --red: #ff3b30;
+  --tone-sun: #f5a300;
+  --tone-night: #5856d6;
+  --tone-cloud: #8e95a3;
+  --tone-rain: #007aff;
+  --tone-snow: #5ac8fa;
+  --tone-storm: #af52de;
+  --tone-fog: #8e8e93;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: var(--text);
+  font-family: 'Inter Variable', 'DejaVu Sans', sans-serif;
+  font-feature-settings: 'cv11', 'ss01'; /* Inter: single-storey a, open digits */
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* The screen: exactly 1280x720 on the Pi; scaled to fit when previewed in a desktop browser. */
+#app {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1280px;
+  height: 720px;
+  transform: translate(-50%, -50%) scale(var(--fit, 1));
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ?flat (measurements only, src/main.ts): no shadows. */
+:root.flat * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}

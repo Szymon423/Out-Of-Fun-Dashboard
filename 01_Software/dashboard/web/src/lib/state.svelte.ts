@@ -1,0 +1,107 @@
+// Dashboard state: loaded from /api/state and kept current by /api/events (SSE).
+// Without a server (or with ?mock in the URL) it uses test data, so the look can be worked
+// on alone. Fine-grained $state means a weather update repaints only the weather card.
+import { mockState } from './mock';
+import { mockPhotos } from './mockPhotos';
+import type { CalendarSource, DashboardState, Display, Light, NowPlaying, Photos, Printer, Update } from './types';
+
+export const dash: DashboardState = $state({
+  weather: null,
+  calendars: null,
+  events: null,
+  music: null,
+  lights: [],
+  printer: null,
+  photos: null,
+  display: null,
+});
+
+export const connection = $state({ mode: 'connecting' as 'connecting' | 'live' | 'mock' | 'offline' });
+
+function apply(update: Update): void {
+  switch (update.topic) {
+    case 'weather':
+      dash.weather = update.data as DashboardState['weather'];
+      break;
+    case 'calendars':
+      dash.calendars = update.data as CalendarSource[] | null;
+      break;
+    case 'events':
+      dash.events = update.data as DashboardState['events'];
+      break;
+    case 'music':
+      dash.music = update.data as NowPlaying | null;
+      break;
+    case 'lights':
+      dash.lights = update.data as Light[];
+      break;
+    case 'printer':
+      dash.printer = update.data as Printer | null;
+      break;
+    case 'photos':
+      dash.photos = update.data as Photos | null;
+      break;
+    case 'display':
+      dash.display = update.data as Display | null;
+      break;
+  }
+}
+
+function useMock(): void {
+  Object.assign(dash, mockState());
+  connection.mode = 'mock';
+  void mockPhotos().then((photos) => {
+    dash.photos = photos;
+  });
+}
+
+export async function connect(): Promise<void> {
+  if (new URLSearchParams(location.search).has('mock')) {
+    useMock();
+    return;
+  }
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    Object.assign(dash, (await res.json()) as DashboardState);
+  } catch (e) {
+    console.warn('No dashboard server, using test data:', e);
+    useMock();
+    return;
+  }
+  const events = new EventSource('/api/events');
+  events.addEventListener('update', (ev) => apply(JSON.parse((ev as MessageEvent<string>).data) as Update));
+  events.onopen = () => (connection.mode = 'live');
+  events.onerror = () => (connection.mode = 'offline'); // EventSource reconnects by itself
+}
+
+async function post(path: string, body?: unknown): Promise<void> {
+  if (connection.mode === 'mock') return;
+  await fetch(path, {
+    method: 'POST',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+export function setLight(id: string, change: Partial<Pick<Light, 'on' | 'brightness' | 'color' | 'white'>>): void {
+  const light = dash.lights.find((l) => l.id === id);
+  if (light) Object.assign(light, change); // show it at once; the server confirms over SSE
+  void post(`/api/lights/${encodeURIComponent(id)}`, change);
+}
+
+export function music(action: 'play' | 'pause' | 'next' | 'previous'): void {
+  const m = dash.music;
+  if (m && (action === 'play' || action === 'pause')) {
+    m.progressMs += m.isPlaying ? Date.now() - m.readAt : 0;
+    m.readAt = Date.now();
+    m.isPlaying = action === 'play';
+  }
+  void post(`/api/music/${action}`);
+}
+
+/** Backlight brightness of the screen, 0-100; the server writes it to /sys/class/backlight. */
+export function setBrightness(brightness: number): void {
+  dash.display = { brightness };
+  void post('/api/display', { brightness });
+}
