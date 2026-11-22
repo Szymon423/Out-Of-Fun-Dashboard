@@ -299,10 +299,39 @@ Wnioski na następne etapy:
 
 ### OTA-3: Pakiet aktualizacji i `tools/ota.sh`
 - Przepis `dashboard-bundle.bb` (`RAUC_BUNDLE_SLOTS = "rootfs"`) i skrypt `tools/ota.sh`.
+  - `RAUC_SLOT_rootfs[fstype] = "ext4"` trzeba podać wprost. Klasa `bundle` domyślnie bierze pierwszy typ z `IMAGE_FSTYPES`, ale tego z przepisu pakietu, czyli z maszyny (`tar.bz2`), a nie z obrazu.
+  - Squashfs pakietu jest kompresowany zstd (`--mksquashfs-args`). Kernel ma `SQUASHFS_ZSTD`, a Pi rozpakowuje zstd szybciej niż domyślny gzip.
+  - `RAUC_BUNDLE_VERSION` to `DISTRO_VERSION`, a pole `build` to data builda. `rauc status` pokazuje oba pola dla każdego slotu.
+  - `tools/ota.sh`:
+    - wysyła pakiet do `/data/ota` i sprawdza go na Pi (`rauc info`, czyli podpis i `compatible`);
+    - instaluje go, usuwa plik i restartuje Pi;
+    - czeka na nowy `boot_id`, bo stary system jeszcze przez chwilę odpowiada na SSH;
+    - na końcu podaje, który slot działa, i zgłasza błąd, jeśli U-Boot wrócił do starego.
+  - Pierwszy test podnosi `DISTRO_VERSION` do 0.2, żeby zmianę było widać w `/etc/os-release`.
 - **Sprawdzenie:**
   - instalacja z A na B, restart, `rauc status` pokazuje uruchomiony slot B;
   - potem z B na A;
   - zmierzyć czas całej aktualizacji.
+
+#### Wyniki OTA-3 (22.11.2026)
+
+Pierwsza aktualizacja przez sieć: z A (0.1) na B (0.2) za pomocą `./tools/ota.sh`, w sumie 90 s.
+
+| Etap | Czas |
+|---|---|
+| wysłanie 160 MB przez `scp` | 30 s |
+| `rauc info`: podpis i łańcuch do CA | poniżej 1 s |
+| `rauc install`: zapis 663 MB do slotu B, `resize2fs`, `BOOT_ORDER=B A` | 40 s |
+| restart do SSH | 19 s |
+
+- Po restarcie działa slot B z `PRETTY_NAME="Out Of Fun Dashboard 0.2 (wrynose)"`. `rauc-mark-good` oznaczyło go jako dobry, a klucz hosta SSH się nie zmienił.
+- `rauc status --detailed` pokazuje przy slocie wersję pakietu, `build`, sumę obrazu i czas instalacji.
+- Pakiet zstd ma 160 MB, czyli 24% z 663 MB obrazu ext4.
+- **Wysyłanie.**
+  - Pi 4 nie ma sprzętowego AES, ale SSH z chacha20 przenosi 32 MB/s.
+  - `scp` przez SFTP z Dropbearem osiągał tylko 5.3 MB/s. `ssh 'cat > plik'` z zapisem na kartę daje 15.5 MB/s, czyli 10 s na pakiet, i tego używa teraz `ota.sh`.
+  - Następne kroki do rozważenia: strumieniowanie RAUC przez HTTP (bez kopii na `/data`) albo aktualizacje adaptacyjne (`block-hash-index`).
+- **Druga aktualizacja, z B na A, tym samym pakietem: 67 s.** Wysyłanie trwało 13 s zamiast 30, instalacja 35 s, a restart 19 s. Oba sloty mają teraz 0.2.
 
 ### OTA-4: Zabezpieczenia i testy powrotu
 - **Watchdog.** `RuntimeWatchdogSec=15s` w `/etc/systemd/system.conf.d/` (watchdog `bcm2835_wdt` jest wbudowany w kernel) oraz `panic=5`.
