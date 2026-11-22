@@ -22,3 +22,7 @@
 	path = 01_Software/yocto/layers/meta-webkit
 	url = https://github.com/Igalia/meta-webkit
 	branch = wrynose-latest
+[submodule "01_Software/yocto/layers/meta-rauc"]
+	path = 01_Software/yocto/layers/meta-rauc
+	url = https://github.com/rauc/meta-rauc.git
+	branch = wrynose

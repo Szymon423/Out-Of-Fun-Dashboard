@@ -23,7 +23,7 @@ Plan z 21.11.2026. Wdrażamy go po etapie z akceleracją GPU w WebKicie.
 | Zmienne U-Boota | Zapisane wprost na karcie, poza partycjami, w dwóch kopiach | Plik `uboot.env` na FAT zniknąłby przy aktualizacji partycji boot, a razem z nim wybór slotu. Dwie kopie chronią przed przerwą w zasilaniu. |
 | Aktualizacja partycji boot | Slot RAUC `boot-mbr-switch` | RAUC zapisuje nową partycję boot obok starej i przełącza wpis w MBR jedną operacją, więc nie ma stanu pośredniego. |
 | Pakiet aktualizacji | `.raucb` w formacie `verity`, podpisany własnym kluczem | Pi sprawdza podpis i integralność przed zapisem. |
-| Przesyłanie | `scp` i `rauc install` przez skrypt `ota.sh` | Najprostsze rozwiązanie. Później można dodać strumieniowanie przez HTTP, bo RAUC ma `streaming`. |
+| Przesyłanie | `scp` i `rauc install` przez skrypt `tools/ota.sh` | Najprostsze rozwiązanie. Później można dodać strumieniowanie przez HTTP, bo RAUC ma `streaming`. |
 | Dane trwałe | Partycja `/data` | Zostają tam tokeny Spotify i Microsoft, ustawienia, klucz hosta SSH i stan RAUC. |
 
 „Firmware” rozumiem tu jako całe oprogramowanie urządzenia, także pliki z partycji boot. Dlatego plan obejmuje `boot-mbr-switch`. Jeśli chodzi tylko o rootfs, etap OTA-5 można pominąć.
@@ -60,7 +60,7 @@ Plan z 21.11.2026. Wdrażamy go po etapie z akceleracją GPU w WebKicie.
 ## Aktualizacja
 
 1. Build na PC: `./build.sh dashboard-bundle` tworzy podpisany pakiet `.raucb`.
-2. `./ota.sh` wysyła pakiet do `/data/ota/`, uruchamia `rauc install`, restartuje Pi, czeka, aż wróci SSH, i pokazuje `rauc status`.
+2. `./tools/ota.sh` wysyła pakiet do `/data/ota/`, uruchamia `rauc install`, restartuje Pi, czeka, aż wróci SSH, i pokazuje `rauc status`.
 3. RAUC na Pi:
    - sprawdza podpis i `compatible`;
    - zapisuje rootfs do nieaktywnego slotu;
@@ -77,7 +77,8 @@ Wszystkie poniższe pliki trafią do `meta-dashboard`, z wyjątkiem kluczy i skr
 | `.gitmodules`, `build/conf/bblayers.conf` | submoduł `layers/meta-rauc` na gałęzi `wrynose` |
 | `conf/distro/dashboard.conf` | `DISTRO_FEATURES:append = " rauc"`, `RPI_USE_U_BOOT = "1"` |
 | `wic/dashboard-ab.wks.in` | układ karty z tabeli powyżej |
-| `recipes-bsp/u-boot/u-boot_%.bbappend` | fragment konfiguracji `env-in-mmc.cfg` i własny `fw_env.config` |
+| `conf/layer.conf` | priorytet warstwy 10, wyższy niż meta-raspberrypi (9), żeby nasze `.bbappend` i pliki wygrywały |
+| `recipes-bsp/u-boot/u-boot_%.bbappend` | fragmenty konfiguracji `env-in-mmc.cfg` i `bootdelay.cfg` oraz własny `fw_env.config` |
 | `recipes-bsp/rpi-u-boot-scr/rpi-u-boot-scr.bbappend` | własny `boot.cmd.in` z logiką slotów |
 | `recipes-bsp/bootfiles/rpi-cmdline.bbappend` | `root=` znika z `cmdline.txt`, bo ustawia go U-Boot |
 | `recipes-core/rauc/rauc-conf.bbappend` | `system.conf` i `ca.cert.pem` (publiczny certyfikat CA) |
@@ -87,7 +88,8 @@ Wszystkie poniższe pliki trafią do `meta-dashboard`, z wyjątkiem kluczy i skr
 | `recipes-bsp/bootfs/dashboard-bootfs.bb` | obraz vfat partycji boot dla slotu `boot-mbr-switch` (etap OTA-5) |
 | `recipes-core/images/dashboard-image.bb` | `WKS_FILE`, `rauc`, `kernel-image`, `BAD_RECOMMENDATIONS += "rauc-mark-good"` |
 | `01_Software/yocto/keys/` | klucze podpisu, w całości w `.gitignore` |
-| `01_Software/yocto/ota.sh` | skrypt narzędziowy do wysyłania i instalacji pakietu |
+| `01_Software/yocto/tools/rauc-keys.sh` | skrypt narzędziowy: tworzenie, sprawdzanie, kopia i wymiana kluczy |
+| `01_Software/yocto/tools/ota.sh` | skrypt narzędziowy do wysyłania i instalacji pakietu |
 
 ### Szkice konfiguracji
 
@@ -125,11 +127,11 @@ Fragment konfiguracji U-Boota (`env-in-mmc.cfg`):
 ```
 # CONFIG_ENV_IS_IN_FAT is not set
 CONFIG_ENV_IS_IN_MMC=y
-CONFIG_SYS_MMC_ENV_DEV=0
-CONFIG_ENV_OFFSET=0x100000
-CONFIG_ENV_OFFSET_REDUND=0x120000
-CONFIG_SYS_REDUNDAND_ENVIRONMENT=y
+CONFIG_ENV_MMC_DEVICE_INDEX=0
 CONFIG_ENV_SIZE=0x4000
+CONFIG_ENV_OFFSET=0x100000
+CONFIG_ENV_REDUNDANT=y
+CONFIG_ENV_OFFSET_REDUND=0x120000
 ```
 
 `fw_env.config` dla `fw_printenv` i `fw_setenv` w Linuksie. Plik z meta-raspberrypi wskazuje `/boot/uboot.env`, więc trzeba go podmienić:
@@ -147,32 +149,68 @@ CONFIG_ENV_SIZE=0x4000
 
 ## Klucze
 
-- **Generowanie.** Klucze tworzy skrypt `layers/meta-rauc/scripts/openssl-ca.sh` i zapisuje je w `01_Software/yocto/keys/`. Cały ten katalog jest w `.gitignore`.
-- **Kopia zapasowa poza repozytorium.** Bez klucza CA żadne już zainstalowane urządzenie nie przyjmie nowej aktualizacji, więc trzeba by znowu flashować kartę.
+- **Generowanie.** Kluczami zarządza `tools/rauc-keys.sh` (`create`, `info`, `backup`, `rotate`).
+  - Pod spodem uruchamia skrypt `layers/meta-rauc/scripts/openssl-ca.sh` w katalogu `keys/`.
+  - Plik w warstwie zostaje nietknięty: `sed` zmienia nazwę organizacji z `Test Org` na `Out Of Fun` w kopii przekazywanej do `bash`.
+  - Cały katalog `keys/` jest w `.gitignore`, a skrypt sprawdza to przed generowaniem.
+- **Pliki ze skryptu:**
+  - `keys/openssl-ca/dev/ca.cert.pem`: publiczny certyfikat CA;
+  - `keys/openssl-ca/dev/private/ca.key.pem`: klucz CA, potrzebny tylko do wystawienia nowego klucza podpisu;
+  - `keys/openssl-ca/dev/development-1.cert.pem` i `keys/openssl-ca/dev/private/development-1.key.pem`: certyfikat i klucz podpisu pakietów.
+- **Kopia zapasowa poza repozytorium.** Bez klucza CA żadne już zainstalowane urządzenie nie przyjmie nowej aktualizacji, więc trzeba by znowu flashować kartę. Kopia to zaszyfrowane archiwum `gpg` z `tools/rauc-keys.sh backup`, przechowywane poza tym komputerem. Nową kopię trzeba zrobić po każdej wymianie kluczy.
 - **Certyfikat CA w warstwie.** Publiczny `ca.cert.pem` trafia do `recipes-core/rauc/files/`.
-- **Gdzie podpis szuka kluczy.** `RAUC_KEY_FILE` i `RAUC_CERT_FILE` w `dashboard-bundle.bb` wskazują `${TOPDIR}/../keys/...`.
-- **Ważność certyfikatów.** Pi nie ma zegara z baterią, więc tuż po starcie ma datę z obrazu. Data `notBefore` certyfikatów musi być wcześniejsza niż ta data. Trzeba to sprawdzić w certyfikatach ze skryptu.
+- **Gdzie podpis szuka kluczy.** `RAUC_KEY_FILE` i `RAUC_CERT_FILE` w `dashboard-bundle.bb` wskazują `${TOPDIR}/../keys/openssl-ca/dev/...`.
+- **Ważność certyfikatów.** Pi nie ma zegara z baterią, więc tuż po starcie może mieć datę z obrazu. Nie przeszkadza to, bo certyfikaty ze skryptu są ważne od 1.01.1970 do 31.12.9999 (sprawdzone 22.11.2026 z OpenSSL 4.0).
+
+### Wymiana kluczy
+
+Pi sprawdza podpis pakietu keyringiem z systemu, który właśnie działa. Pakiet podpisany nowym kluczem zostanie więc odrzucony, dopóki Pi nie ma nowego CA. Wymiana idzie przez pakiet przejściowy:
+
+1. `./tools/rauc-keys.sh rotate`: stare klucze trafiają do `keys/archive/openssl-ca-<data>/`, a w `keys/openssl-ca/` powstają nowe.
+2. Keyring w warstwie zawiera oba CA, nowe i stare:
+   ```bash
+   cat keys/openssl-ca/dev/ca.cert.pem keys/archive/openssl-ca-<data>/dev/ca.cert.pem > meta-dashboard/recipes-core/rauc/files/ca.cert.pem
+   ```
+3. Pakiet przejściowy z tym keyringiem jest podpisany jeszcze starym kluczem: `RAUC_KEY_FILE` i `RAUC_CERT_FILE` w `dashboard-bundle.bb` wskazują tymczasowo `keys/archive/...`. Instalujemy go przez OTA na każdym urządzeniu.
+4. Ścieżki wracają do `keys/openssl-ca/dev/...`, więc kolejne pakiety mają już nowy podpis.
+5. Gdy żadne urządzenie nie ma już starego keyringa, stare CA usuwamy z `ca.cert.pem`. Potem robimy `./tools/rauc-keys.sh backup`.
+
+Jeśli stary klucz zginął albo wyciekł, pakietu przejściowego nie da się bezpiecznie zrobić i zostaje flashowanie karty.
 
 ## Etapy
 
 ### OTA-0: Przygotowanie (bez flashowania)
 - Dodać submoduł `meta-rauc` (`wrynose`) i wpisać go do `bblayers.conf`.
-- Wygenerować klucze i zrobić ich kopię zapasową.
+- Wygenerować klucze (`tools/rauc-keys.sh create`) i zrobić ich kopię zapasową (`tools/rauc-keys.sh backup`).
 - Dopisać `keys/` do `.gitignore`.
 - **Sprawdzenie:** parsowanie bez błędów (`./build.sh -p`).
+- Do etapu OTA-2 każdy build pokazuje ostrzeżenie `meta-rauc`, że w `DISTRO_FEATURES` brakuje `rauc`. Tak ma być. Gdy ta cecha jest włączona, `packagegroup-base` sam dociąga do obrazu `rauc` z przykładowym `system.conf`, więc włączamy ją dopiero w OTA-2 razem z własnym `system.conf`.
 
 ### OTA-1: U-Boot ze zmiennymi na karcie (flashowanie)
 - Ustawić `RPI_USE_U_BOOT = "1"`, dodać fragment `env-in-mmc.cfg` i własny `fw_env.config`.
-- Rootfs zostaje na razie jeden, a kernel nadal leży na `p1` (domyślny `boot.cmd`).
-- **Sprawdzenie:**
-  - Pi startuje przez U-Boot;
+  - Nazwy opcji są z U-Boota 2026.01. Od wersji 2025.x `SYS_MMC_ENV_DEV` nazywa się `ENV_MMC_DEVICE_INDEX`, a `SYS_REDUNDAND_ENVIRONMENT` nazywa się `ENV_REDUNDANT`. Stare nazwy `merge_config` pomija i zostawia tylko ostrzeżenie w logu `do_configure`, a build przechodzi.
+- `bootdelay.cfg` z `CONFIG_BOOTDELAY=-2`: start bez czekania na klawisz. Szum na niepodłączonym UART-cie nie zatrzyma wtedy U-Boota. Tak samo robi meta-raspberrypi dla Pi 5.
+- Priorytet `meta-dashboard` podniesiony do 10.
+  - BitBake nakłada `.bbappend` od najniższego priorytetu warstwy, a `FILESEXTRAPATHS:prepend` z ostatniego `.bbappend` trafia na początek ścieżki wyszukiwania.
+  - Przy priorytecie 6 nasz `fw_env.config` przegrałby z plikiem z meta-raspberrypi (priorytet 9).
+- `RPI_USE_U_BOOT` dopisuje do `config.txt` `enable_uart=1`, którego U-Boot wymaga na Pi 4. `ENABLE_UART` zostaje nieustawione, więc w `cmdline.txt` nie ma konsoli szeregowej.
+- Do obrazu dochodzą `libubootenv-bin` (`fw_printenv`, `fw_setenv`) i `u-boot-env` (`/etc/fw_env.config`).
+- Rootfs zostaje na razie jeden, a kernel nadal leży na `p1`. Domyślny `boot.cmd` wywołuje `saveenv` przy każdym starcie, bo na FAT nie ma `uboot.env`. Dzięki temu zmienne zapisują się na karcie już przy pierwszym starcie.
+- **Przed flashowaniem:** sprawdzić w `deploy` `fw_env.config`, opcje `ENV_*` w `.config` U-Boota i `config.txt`.
+- **Sprawdzenie na Pi:**
+  - `/proc/device-tree/chosen/u-boot,version` istnieje, czyli Pi wystartowało przez U-Boot;
   - `fw_printenv` działa;
   - wartość ustawiona przez `fw_setenv test 1` przetrwa restart;
-  - zmierzyć, o ile wydłużył się start systemu.
+  - `/proc/cmdline` jest taki jak wcześniej;
+  - wydajność bez zmian (`ONLY=cv-rect,dom-both,dom-layer spike/diag.sh base`), bo `enable_uart` może zablokować taktowanie rdzenia VPU;
+  - czas od włączenia zasilania do strony kiosku, mierzony stoperem przed zmianą i po niej.
 
 ### OTA-2: Układ A/B i RAUC (ostatnie flashowanie)
 - Plik `.wks` z nowym układem, `boot.cmd.in` z logiką slotów i `system.conf`.
-- Do obrazu dochodzą `rauc` i `kernel-image`, do tego `/data` z powiększaniem przy pierwszym starcie i `fstab`.
+- `DISTRO_FEATURES:append = " rauc"` w `dashboard.conf`.
+  - Od wrynose `rauc-conf` instaluje `system.conf` i keyring do `/usr/lib/rauc/`.
+  - `rauc` trafia do obrazu przez `packagegroup-base`.
+- Do obrazu dochodzi `kernel-image`, do tego `/data` z powiększaniem przy pierwszym starcie i `fstab`.
 - Klucz hosta Dropbeara przenieść na `/data`: `/etc/dropbear` jako dowiązanie do `/data/dropbear` i `RequiresMountsFor=/data` w `dropbearkey.service`.
   - Samo `DROPBEAR_RSAKEY_DIR` nie wystarczy, bo warunki `ConditionPathExists` w tej usłudze sprawdzają tylko `/etc/dropbear` i `/var/lib/dropbear`.
 - **Sprawdzenie:**
@@ -181,8 +219,8 @@ CONFIG_ENV_SIZE=0x4000
   - `df -h /data` obejmuje resztę karty;
   - klucz hosta SSH nie zmienia się po restarcie.
 
-### OTA-3: Pakiet aktualizacji i `ota.sh`
-- Przepis `dashboard-bundle.bb` (`RAUC_BUNDLE_SLOTS = "rootfs"`) i skrypt `ota.sh`.
+### OTA-3: Pakiet aktualizacji i `tools/ota.sh`
+- Przepis `dashboard-bundle.bb` (`RAUC_BUNDLE_SLOTS = "rootfs"`) i skrypt `tools/ota.sh`.
 - **Sprawdzenie:**
   - instalacja z A na B, restart, `rauc status` pokazuje uruchomiony slot B;
   - potem z B na A;

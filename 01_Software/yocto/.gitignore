@@ -7,3 +7,5 @@
 !/build/conf/toolcfg.conf
 /downloads/
 /sstate-cache/
+# RAUC signing keys never go to git; keep an encrypted backup elsewhere.
+/keys/
