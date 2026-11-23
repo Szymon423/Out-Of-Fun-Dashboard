@@ -1,7 +1,9 @@
 [Unit]
 Description=Dashboard kiosk (WPE WebKit in Weston)
 Requires=weston.service
-After=weston.service
+# The page comes from dashboard-server, which is ready (Type=notify) once its port is open.
+Wants=dashboard-server.service
+After=weston.service dashboard-server.service
 # Restarting Weston restarts the kiosk too.
 PartOf=weston.service
 

@@ -15,4 +15,4 @@ do_install() {
 
 SYSTEMD_SERVICE:${PN} = "dashboard-kiosk.service"
 CONFFILES:${PN} = "${sysconfdir}/default/dashboard-kiosk"
-RDEPENDS:${PN} = "dashboard-launcher weston-init"
+RDEPENDS:${PN} = "dashboard-launcher weston-init dashboard-server"

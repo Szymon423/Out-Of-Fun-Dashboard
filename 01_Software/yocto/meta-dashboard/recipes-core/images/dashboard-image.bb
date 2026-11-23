@@ -15,9 +15,10 @@ IMAGE_INSTALL = " \
         tzdata \
 "
 
-# Weston kiosk with the WPE launcher showing the benchmark page.
+# Weston kiosk with the WPE launcher showing the dashboard from dashboard-server; the
+# spike pages stay for spike/diag.sh.
 IMAGE_FEATURES += "weston"
-IMAGE_INSTALL += "dashboard-kiosk dashboard-spike ttf-dejavu-sans ttf-dejavu-sans-mono bash"
+IMAGE_INSTALL += "dashboard-kiosk dashboard-server dashboard-web dashboard-spike ttf-dejavu-sans ttf-dejavu-sans-mono bash"
 
 # fw_printenv and fw_setenv for the U-Boot environment, used by RAUC.
 IMAGE_INSTALL += "libubootenv-bin u-boot-env"

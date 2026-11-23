@@ -1,6 +1,6 @@
 [Unit]
 Description=Check that the dashboard came up before RAUC marks this slot as good
-After=weston.service dashboard-kiosk.service dropbear.socket data.mount
+After=weston.service dashboard-server.service dashboard-kiosk.service dropbear.socket data.mount
 Before=boot-complete.target
 
 [Service]

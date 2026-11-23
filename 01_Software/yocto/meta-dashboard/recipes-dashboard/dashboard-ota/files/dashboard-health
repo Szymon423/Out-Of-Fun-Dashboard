@@ -8,8 +8,10 @@
 set -u
 
 TIMEOUT_S=90   # time for everything to come up
-STABLE_S=15    # time the kiosk must then keep running without a restart
-SERVICES="weston.service dashboard-kiosk.service dropbear.socket"
+STABLE_S=15    # time the server and the kiosk must then keep running without a restart
+SERVICES="weston.service dashboard-server.service dashboard-kiosk.service dropbear.socket"
+WATCHED="dashboard-server.service dashboard-kiosk.service"
+HEALTH_URL=http://127.0.0.1:8080/api/health
 LOG=/data/dashboard-health.log
 
 slot=$(sed -n 's/.*rauc\.slot=\([^ ]*\).*/\1/p' /proc/cmdline)
@@ -30,8 +32,16 @@ fail() {
     exit 1
 }
 
+# Running is not enough for the server: it must also answer.
 healthy() {
-    mountpoint -q /data && systemctl -q is-active $SERVICES
+    mountpoint -q /data && systemctl -q is-active $SERVICES &&
+        wget -q -O /dev/null -T 3 "$HEALTH_URL"
+}
+
+restarts() {
+    for unit in $WATCHED; do
+        printf '%s ' "$(systemctl show -P NRestarts "$unit")"
+    done
 }
 
 waited=0
@@ -43,10 +53,9 @@ until healthy; do
     waited=$(( waited + 2 ))
 done
 
-restarts=$(systemctl show -P NRestarts dashboard-kiosk.service)
+before=$(restarts)
 sleep "$STABLE_S"
 healthy || fail "stopped within ${STABLE_S} s of coming up"
-[ "$(systemctl show -P NRestarts dashboard-kiosk.service)" = "$restarts" ] ||
-    fail "dashboard-kiosk restarted within ${STABLE_S} s"
+[ "$(restarts)" = "$before" ] || fail "dashboard-server or dashboard-kiosk restarted within ${STABLE_S} s"
 
 log "healthy, up after ${waited} s and stable for ${STABLE_S} s"
