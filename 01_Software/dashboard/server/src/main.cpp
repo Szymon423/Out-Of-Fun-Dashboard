@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 
+#include "calendar.hpp"
 #include "config.hpp"
 #include "display.hpp"
 #include "http_api.hpp"
@@ -134,6 +135,12 @@ int main(int argc, char **argv) {
     log_info("spotify: no spotify.clientId in {}/config.json, no music", options.data.string());
   }
 
+  std::optional<CalendarProvider> calendars;
+  if (!config.calendars.empty()) {
+    calendars.emplace(hub, config.calendars);
+  } else {
+    log_info("calendar: no calendars in {}/config.json", options.data.string());
+  }
   std::optional<PrinterProvider> printer;
   if (config.printer) {
     printer.emplace(hub, *config.printer);
@@ -166,6 +173,7 @@ int main(int argc, char **argv) {
   signals.join();
 
   printer.reset();
+  calendars.reset();
   spotify.reset();
   photos.reset();
   weather.reset();

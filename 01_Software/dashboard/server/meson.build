@@ -11,6 +11,7 @@ project(
 
 curl = dependency('libcurl')
 json = dependency('nlohmann_json')
+ical = dependency('libical') # calendars: ICS parsing and recurring events
 threads = dependency('threads')
 # Eclipse Paho MQTT C, the synchronous client with TLS: the Bambu printer (printer.hpp).
 # Neither Fedora's nor Yocto's build ships a pkg-config file for it.
@@ -28,6 +29,7 @@ httplib = declare_dependency(
 
 core = static_library(
   'dashboard-core',
+  'src/calendar.cpp',
   'src/config.cpp',
   'src/display.cpp',
   'src/fetch.cpp',
@@ -38,11 +40,11 @@ core = static_library(
   'src/printer.cpp',
   'src/spotify.cpp',
   'src/weather.cpp',
-  dependencies: [curl, json, threads, paho],
+  dependencies: [curl, json, threads, paho, ical],
 )
 core_dep = declare_dependency(
   link_with: core,
-  dependencies: [curl, json, threads, paho],
+  dependencies: [curl, json, threads, paho, ical],
   include_directories: include_directories('src'),
 )
 
@@ -72,6 +74,10 @@ test(
 test(
   'printer',
   executable('printer-test', 'tests/printer_test.cpp', dependencies: core_dep, build_by_default: false),
+)
+test(
+  'calendar',
+  executable('calendar-test', 'tests/calendar_test.cpp', dependencies: core_dep, build_by_default: false),
 )
 test(
   'hub',

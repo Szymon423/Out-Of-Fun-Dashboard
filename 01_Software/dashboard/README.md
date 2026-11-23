@@ -12,7 +12,7 @@ Podgląd: `epiphany http://localhost:5173/?mock`. Inne widoki: `?page=weather`, 
 
 ## Serwer na PC
 
-Biblioteki: `sudo dnf install libcurl-devel json-devel paho-c-devel`. `cpp-httplib` jest w drzewie (`server/third_party/`).
+Biblioteki: `sudo dnf install libcurl-devel json-devel paho-c-devel libical-devel`. `cpp-httplib` jest w drzewie (`server/third_party/`).
 
 ```bash
 meson setup build/server server

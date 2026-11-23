@@ -65,6 +65,21 @@ Config load_config(const std::filesystem::path &data_dir) {
       config.printer = std::move(settings);
     }
   }
+  if (const auto calendars = doc.find("calendars"); calendars != doc.end() && calendars->is_array()) {
+    for (const auto &c : *calendars) {
+      if (!c.is_object()) continue;
+      CalendarSettings settings{c.value("id", ""), c.value("name", ""), c.value("color", "#8e8e93"),
+                                c.is_object() && c.contains("url") && c["url"].is_string() ? c["url"].get<std::string>()
+                                                                                          : std::string()};
+      if (settings.id.empty() || settings.name.empty()) {
+        log_error("{}: a calendar needs id and name; skipping it", path.string());
+      } else if (settings.url.empty()) {
+        log_info("{}: calendar {} has no url yet; skipping it", path.string(), settings.name);
+      } else {
+        config.calendars.push_back(std::move(settings));
+      }
+    }
+  }
   if (const auto spotify = doc.find("spotify"); spotify != doc.end() && spotify->is_object()) {
     if (std::string id = spotify->value("clientId", ""); !id.empty()) config.spotify_client_id = std::move(id);
   }

@@ -36,7 +36,8 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
       "location": { "name": "Kraków" },
       "immich": { "url": "http://192.168.1.20:2283", "apiKey": "…" },
       "spotify": { "clientId": "…" },
-      "printer": { "host": "192.168.1.181", "serial": "…", "accessCode": "…", "model": "X2D" }
+      "printer": { "host": "192.168.1.181", "serial": "…", "accessCode": "…", "model": "X2D" },
+      "calendars": [ { "id": "m4t", "name": "M4T", "color": "#0a84ff", "url": "https://…/calendar.ics" } ]
     }
     ```
 
@@ -179,7 +180,20 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
   - X2D ma dwie dysze w `device.extruder.info[]`. Ich temperatura jest zapisana jako `(cel << 16) | bieżąca`; to samo dotyczy `device.ctc` (komora). Na idle'u cel wynosi 0. Rozpakowanie w trakcie grzania trzeba jeszcze potwierdzić na wydruku.
   - Na ekran trafia zmiana stanu, zadania, AMS lub komunikatu od razu. Same temperatury (w pełnych stopniach) idą najwyżej co 3 s.
   - Klient MQTT to `paho-mqtt-c` (biblioteka `paho-mqtt3cs`): na PC pakiet `paho-c-devel`, w Yocto przepis z meta-oe. Certyfikat drukarki pochodzi z własnego CA Bambu, więc serwer go nie weryfikuje.
-  - Na później: obraz z kamery (port 6000) i miniaturka wydruku (FTPS, port 990).
+  - Identyfikator klienta MQTT zawiera nazwę maszyny (`out-of-fun-dashboard-<host>`).
+    - Broker drukarki rozłącza starsze z dwóch połączeń o tym samym identyfikatorze.
+    - Przy wspólnym identyfikatorze serwer na Pi i serwer na PC wyrzucały się nawzajem co około 5 s.
+  - Kamera (port 6000) i miniaturka wydruku (FTPS, port 990) są możliwe, ale użytkownik ich nie potrzebuje.
+- **Kalendarze (D5).** Kalendarze czytamy z opublikowanych linków ICS, tylko do odczytu i bez logowania.
+  - Linki publikuje się w Outlooku: Ustawienia → Kalendarz → Kalendarze udostępnione → Opublikuj. Google ma do tego tajny adres iCal.
+  - Link jest tajny: kto go ma, widzi kalendarz. Leży więc tylko w `config.json`.
+  - Serwer pobiera każdy link co 10 min. Kalendarz, który nie odpowiada, zostawia swoje ostatnie wydarzenia.
+  - Rozwijanie wydarzeń robi `libical`, od początku poprzedniego miesiąca do trzech miesięcy naprzód:
+    - serie (`RRULE`) i wykluczone daty (`EXDATE`);
+    - przeniesione i odwołane pojedyncze spotkania (`RECURRENCE-ID`): pierwotna data nie pochodzi wtedy z serii;
+    - nazwy stref z Windows („Central European Standard Time”, „W. Europe Standard Time”) z definicji `VTIMEZONE` w samym pliku.
+  - Wydarzenia z godziną idą w UTC (`…Z`). Całodniowe idą jako lokalna północ bez strefy, z końcem wyłącznym.
+  - Źródła: Prywatny (jeszcze bez linku), M4T i Itens. Pomiar z 23.11.2026: M4T 31 wydarzeń, Itens 15. Godziny lokalne są poprawne po obu stronach zmiany czasu 25.10.
 
 ## API (wspólne dla frontendu i serwera)
 
@@ -216,5 +230,5 @@ Typy danych są w `web/src/lib/types.ts`. Serwer zwraca dokładnie te pola.
 | D3 | Zdjęcia z Immicha: losowe poziome z całej biblioteki, wspomnienia, pamięć podręczna na `/data`, stuknięcia na pulpicie zdjęć, nowy wygaszacz | sprawdzone 23.11.2026 na Pi przez `kiosk-url.sh dev`: zdjęcia, przenikanie i pamięć w porządku; do zrobienia aktualizacja OTA |
 | D4 | Spotify: logowanie raz z PC (`tools/spotify-login.py`), co gra, sterowanie | kod gotowy 23.11.2026; sterowanie z ekranu po zalogowaniu |
 | D4b | Drukarka Bambu Lab X2D przez lokalne MQTT (stan, postęp, dwie dysze, AMS) | kod gotowy 23.11.2026, odczyt sprawdzony na PC; do potwierdzenia temperatury przy grzaniu |
-| D5 | Kalendarze Microsoft: device code flow z kodem na ekranie | najpierw sprawdzić, czy polityka służbowego tenanta na to pozwala |
+| D5 | Kalendarze z linków ICS (Outlook: M4T, Itens; prywatny później) | kod gotowy 23.11.2026, sprawdzony na prawdziwych kalendarzach na PC |
 | D6 | Dopracowanie: noc (ściemnianie podświetlenia), ustawienia, stany błędów i braku sieci | – |
