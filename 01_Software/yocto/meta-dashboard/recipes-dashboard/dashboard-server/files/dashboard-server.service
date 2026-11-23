@@ -1,0 +1,22 @@
+[Unit]
+Description=Dashboard server (frontend and /api on 127.0.0.1:8080)
+# config.json and saved state live in /data/dashboard (created by dashboard-server.conf).
+RequiresMountsFor=/data
+After=network.target
+
+[Service]
+# Ready only once the port is open, so the kiosk started after it finds the page.
+Type=notify
+User=dashboard
+Group=dashboard
+ExecStart=/usr/bin/dashboard-server --backlight auto
+Restart=always
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/data/dashboard
+
+[Install]
+WantedBy=multi-user.target

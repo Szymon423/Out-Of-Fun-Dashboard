@@ -1,0 +1,2 @@
+# Lets dashboard-server (group dashboard) set the screen brightness from the control bar.
+SUBSYSTEM=="backlight", ACTION=="add", RUN+="/bin/chgrp dashboard /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"

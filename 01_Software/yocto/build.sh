@@ -13,6 +13,18 @@ CONTAINER_NAME=dashboard-yocto-build
 LOG_DIR="$YOCTO_DIR/build/logs"
 PROGRESS="$LOG_DIR/progress.log"
 LOCK="$LOG_DIR/.build.lock"
+WEB_DIR=$(realpath -m "$YOCTO_DIR/../dashboard/web")
+
+# The dashboard frontend is built here on the PC and dashboard-web packages web/dist as it
+# is: Node and npm inside BitBake would be a long build with awkward dependencies.
+build_web() {
+  local log="$LOG_DIR/web-build.log"
+  if ! (cd "$WEB_DIR" && { [[ -d node_modules ]] || npm ci --no-audit --no-fund; } && npm run build) > "$log" 2>&1; then
+    echo "BŁĄD: frontend się nie zbudował (npm run build w $WEB_DIR). Log: $log"
+    return 1
+  fi
+  echo "Frontend zbudowany: $WEB_DIR/dist"
+}
 
 # Turns BitBake's plain output into a short progress view.
 summarize() {
@@ -67,6 +79,7 @@ fi
 log="$LOG_DIR/build-$(date +%Y%m%d-%H%M%S).log"
 ln -sfn "$(basename "$log")" "$LOG_DIR/latest.log"
 echo "bitbake $* (pełny log: $log)" | tee "$PROGRESS"
+build_web | tee -a "$PROGRESS"
 
 # The log and progress filters ignore Ctrl+C, so BitBake can stop cleanly and
 # its final messages still reach the log.
