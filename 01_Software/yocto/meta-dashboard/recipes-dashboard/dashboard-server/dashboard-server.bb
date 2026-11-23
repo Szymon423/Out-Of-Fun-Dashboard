@@ -13,7 +13,7 @@ SRC_URI = " \
 "
 S = "${UNPACKDIR}/server"
 
-DEPENDS = "curl nlohmann-json paho-mqtt-c"
+DEPENDS = "curl nlohmann-json paho-mqtt-c libical"
 
 inherit meson pkgconfig systemd useradd
 
