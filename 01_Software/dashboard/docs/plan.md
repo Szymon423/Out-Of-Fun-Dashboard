@@ -109,6 +109,15 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
   - Tryby Dzień / Tydzień / Miesiąc, przewijanie strzałkami i „Dziś”.
   - Trzy źródła: Prywatny, M4T i Itens, każde w swoim kolorze. Chipy pod tytułem włączają i wyłączają źródła, a filtr działa też na widżecie podsumowania.
   - Tryb i filtr są zapamiętane.
+  - Stuknięcie w wydarzenie w widoku dnia lub tygodnia otwiera kartę szczegółów:
+    - kalendarz, tytuł i data;
+    - godziny z czasem trwania i stanem („za 2 h”, „trwa, do 10:30”, „jutro”, „zakończone”);
+    - miejsce i pełny opis.
+    Kartę zamyka stuknięcie obok albo krzyżyk; zamyka się też przy zmianie pulpitu. Jest zamontowana obok stron, nie w nich, bo strony blokują przewijanie dotykiem (gesty), a opis musi się przewijać.
+  - Wydarzenia całodniowe stoją w cienkim pasku pod nazwami dni, jako belki przez wszystkie dni, które obejmują.
+    - Mieszczą się dwa rzędy, w widoku dnia trzy. Nadmiar to „+N więcej”, które otwiera widok tego dnia.
+    - Bez wydarzeń całodniowych paska nie ma.
+    - Wcześniej każdy dzień miał własną kolumnę chipów, przez co pasek rozpychał siatkę godzin.
 - **Drukarka Bambu Lab X2D.**
   - Odczyt: stan, postęp, czas do końca, warstwy, dwie dysze, stół, komora, AMS z wilgotnością i komunikaty o błędach.
   - Szczegóły odczytu są w części o serwerze.
@@ -125,6 +134,8 @@ Parametry adresu do testów:
 | `?theme=light` / `?theme=dark` | wymuszony motyw |
 | `?controls` | otwarty pasek sterowania |
 | `?calendar=day` / `week` / `month` | tryb kalendarza |
+| `?event=next` | od razu karta najbliższego wydarzenia (z opisem, jeśli jest) |
+| `?printer=idle` / `finished` / `offline` / `error` | stan drukarki w danych testowych |
 | `?fonts` | wybór kroju zegara |
 | `?bench` (`&rounds=2`, `&still`, `&flat`) | pomiar płynności przejść, wyniki w journalu (README) |
 
@@ -178,6 +189,16 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
   - Lokalne MQTT (`ssl://<ip>:8883`, użytkownik `bblp`, hasło to kod dostępu z ekranu drukarki) działa w zwykłym trybie chmurowym. Tryb tylko LAN i tryb deweloperski nie są potrzebne, więc aplikacja Bambu Handy działa dalej.
   - Serwer subskrybuje `device/<serial>/report` i prosi o pełny stan (`pushall`) przy połączeniu i co 5 min. Częściowe aktualizacje dokleja do całości: obiekty klucz po kluczu, tablice z `id` (AMS, sloty, ekstrudery) element po elemencie. Do drukarki nic poza `pushall` nie wysyła.
   - X2D ma dwie dysze w `device.extruder.info[]`. Ich temperatura jest zapisana jako `(cel << 16) | bieżąca`; to samo dotyczy `device.ctc` (komora). Na idle'u cel wynosi 0. Rozpakowanie w trakcie grzania trzeba jeszcze potwierdzić na wydruku.
+  - Kafelek na podsumowaniu w trakcie druku pokazuje pierścień postępu. W spoczynku, na wzór widżetu Baterie w iOS:
+    - cztery sloty AMS jako pierścienie w kolorach załadowanych filamentów, z materiałem w środku;
+    - aktywny slot ma dodatkową obwódkę, a pusty to cienki przerywany okrąg;
+    - pod spodem jest ostatni wydruk albo komunikat drukarki.
+  - Czego próbowaliśmy wcześniej (23.11.2026):
+    - Rysunek drukarki w SVG odstawał estetycznie od reszty, więc wypadł.
+    - Render ostatniego modelu z pliku 3MF nie jest osiągalny lokalnie.
+      - FTPS drukarki (port 990, `bblp` z kodem dostępu) działa tylko z TLS 1.2 i z wznowieniem sesji TLS na połączeniu danych; bez tego vsftpd odpowiada 522.
+      - FTPS pokazuje jednak tylko pamięć zewnętrzną, a X2D jej nie ma: `tl_external_total_kb` wynosi 0.
+      - Wydruki z chmury trafiają do pamięci wewnętrznej.
   - Na ekran trafia zmiana stanu, zadania, AMS lub komunikatu od razu. Same temperatury (w pełnych stopniach) idą najwyżej co 3 s.
   - Klient MQTT to `paho-mqtt-c` (biblioteka `paho-mqtt3cs`): na PC pakiet `paho-c-devel`, w Yocto przepis z meta-oe. Certyfikat drukarki pochodzi z własnego CA Bambu, więc serwer go nie weryfikuje.
   - Identyfikator klienta MQTT zawiera nazwę maszyny (`out-of-fun-dashboard-<host>`).
@@ -192,6 +213,7 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
     - serie (`RRULE`) i wykluczone daty (`EXDATE`);
     - przeniesione i odwołane pojedyncze spotkania (`RECURRENCE-ID`): pierwotna data nie pochodzi wtedy z serii;
     - nazwy stref z Windows („Central European Standard Time”, „W. Europe Standard Time”) z definicji `VTIMEZONE` w samym pliku.
+  - Opis wydarzenia (`description`) serwer przycina: odcina stopkę spotkania Outlooka od pierwszej linii podkreślników („Spotkanie w aplikacji Microsoft Teams”, linki, numery), ściska puste linie i skraca do 2000 znaków.
   - Wydarzenia z godziną idą w UTC (`…Z`). Całodniowe idą jako lokalna północ bez strefy, z końcem wyłącznym.
   - Źródła: Prywatny (jeszcze bez linku), M4T i Itens. Pomiar z 23.11.2026: M4T 31 wydarzeń, Itens 15. Godziny lokalne są poprawne po obu stronach zmiany czasu 25.10.
 

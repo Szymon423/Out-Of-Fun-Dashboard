@@ -70,9 +70,9 @@
       {#if calView.mode === 'month'}
         <MonthGrid month={calView.anchor} {events} />
       {:else if calView.mode === 'week'}
-        <TimeGrid days={weekDays} {events} />
+        <TimeGrid onselect={(e) => (calView.selected = e)} days={weekDays} {events} />
       {:else}
-        <TimeGrid days={[calView.anchor]} {events} header={false} />
+        <TimeGrid onselect={(e) => (calView.selected = e)} days={[calView.anchor]} {events} header={false} />
       {/if}
     </div>
   </div>

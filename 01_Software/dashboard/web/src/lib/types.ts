@@ -52,6 +52,7 @@ export interface CalendarEvent {
   calendar: string; // name of the source, shown under the title
   color: string; // CSS colour of the source
   location?: string;
+  description?: string; // plain text; Outlook's Teams footer already cut off by the server
 }
 
 export interface NowPlaying {

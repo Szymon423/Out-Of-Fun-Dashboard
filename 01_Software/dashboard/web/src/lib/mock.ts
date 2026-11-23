@@ -1,6 +1,6 @@
 // Test data for working on the look without the server (?mock, or no server reachable).
 // Built around the current time, so the agenda and the hourly forecast always look live.
-import type { CalendarEvent, CalendarSource, DashboardState, WeatherDay, WeatherHour } from './types';
+import type { CalendarEvent, CalendarSource, DashboardState, Printer, WeatherDay, WeatherHour } from './types';
 
 function at(hoursFromNow: number, minute = 0): Date {
   const d = new Date();
@@ -89,7 +89,14 @@ function events(): CalendarEvent[] {
     const week = Math.floor(i / 7);
     if (wd >= 1 && wd <= 5) {
       add('m4t', 'Daily zespołu', at(day, 9, 30), 15);
-      if (wd === 1) add('m4t', 'Planowanie sprintu', at(day, 10, 0), 90, { location: 'Sala Wisła' });
+      if (wd === 1) {
+        add('m4t', 'Planowanie sprintu', at(day, 10, 0), 90, {
+          location: 'Sala Wisła',
+          description:
+            'Cel sprintu i podział zadań.\n\nPrzed spotkaniem przejrzyj tablicę i oszacuj swoje zgłoszenia. ' +
+            'Zabierz listę ryzyk z poprzedniego sprintu.',
+        });
+      }
       if (wd === 3) add('m4t', 'Przegląd architektury', at(day, 13, 0), 60);
       if (wd === 5 && week % 2 === 0) add('m4t', 'Retrospektywa', at(day, 14, 0), 60);
       if (wd === 2 || wd === 4) add('itens', 'Spotkanie z klientem', at(day, 15, 0), 60, { location: 'Teams' });
@@ -111,10 +118,29 @@ function events(): CalendarEvent[] {
     calendar: cal.private.name,
     color: cal.private.color,
   });
+  // All-day: a three-day leave starting tomorrow and a single day later this week.
+  const allDay = (calendarId: string, title: string, fromDay: number, days: number) => {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() + fromDay);
+    const end = new Date(start);
+    end.setDate(start.getDate() + days);
+    add(calendarId, title, start, 0, { end: iso(end), allDay: true });
+  };
+  allDay('private', 'Urlop w górach', 1, 3);
+  allDay('m4t', 'Dzień bez spotkań', 2, 1);
+  allDay('itens', 'Wdrożenie u klienta', 2, 1);
+
   // Relative to now, so the summary always has something running and something next.
   add('itens', 'Konsultacje', new Date(now.getTime() - 20 * 60_000), 60);
   add('private', 'Odbiór paczki', new Date(now.getTime() + 85 * 60_000), 30);
   return list;
+}
+
+/** ?printer=idle|finished|offline|error shows the printer in that state instead of printing. */
+function printerState(): Printer['state'] {
+  const forced = new URLSearchParams(location.search).get('printer');
+  return forced === 'idle' || forced === 'finished' || forced === 'offline' || forced === 'error' ? forced : 'printing';
 }
 
 export function mockState(): DashboardState {
@@ -152,7 +178,7 @@ export function mockState(): DashboardState {
     printer: {
       name: 'Drukarka',
       model: 'X2D',
-      state: 'printing',
+      state: printerState(),
       job: { name: 'Uchwyt na słuchawki', progress: 62, remainingMin: 47, layer: 148, totalLayers: 240, thumbnailUrl: null },
       nozzles: [
         { temp: 219, target: 220 },
@@ -167,7 +193,7 @@ export function mockState(): DashboardState {
         { color: null, material: '', remaining: null, active: false },
       ],
       amsHumidity: 16,
-      message: null,
+      message: printerState() === 'error' ? 'Komunikat drukarki HMS_0300_2000_0001_0001' : null,
     },
     photos: null, // generated asynchronously, see mockPhotos.ts
     display: { brightness: 80 },

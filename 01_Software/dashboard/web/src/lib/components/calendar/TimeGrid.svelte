@@ -1,12 +1,19 @@
 <!-- Day and week view: hours 7-23 down, days across, events as blocks in their time slot,
-     like Apple Calendar. Overlapping events share the width of the day. A red line marks now. -->
+     like Apple Calendar. Overlapping events share the width of the day. A red line marks now.
+     All-day events sit in a thin strip under the day names, as bars across the days they
+     cover; the strip is left out when there are none. A tap on an event opens its details. -->
 <script lang="ts">
   import { clock } from '../../clock.svelte';
-  import { eventsOn, sameDay, startOfDay } from '../../calendarView.svelte';
+  import { eventsOn, sameDay, showDay, startOfDay } from '../../calendarView.svelte';
   import { hhmm } from '../../format';
   import type { CalendarEvent } from '../../types';
 
-  let { days, events, header = true }: { days: Date[]; events: CalendarEvent[]; header?: boolean } = $props();
+  let {
+    days,
+    events,
+    header = true,
+    onselect,
+  }: { days: Date[]; events: CalendarEvent[]; header?: boolean; onselect?: (event: CalendarEvent) => void } = $props();
 
   const FIRST_HOUR = 7;
   const LAST_HOUR = 23;
@@ -71,6 +78,44 @@
     return placed;
   }
 
+  interface Bar {
+    ev: CalendarEvent;
+    from: number; // first and last day column it covers
+    to: number;
+    row: number;
+  }
+
+  /** All-day events in rows of bars; beyond the rows that fit, a "+N" per day instead. */
+  const allDay = $derived.by(() => {
+    const maxRows = days.length === 1 ? 3 : 2;
+    const first = startOfDay(days[0]).getTime();
+    const last = days.length - 1;
+    const index = (t: number) => Math.round((startOfDay(new Date(t)).getTime() - first) / 86_400_000);
+    const items = events
+      .filter((e) => e.allDay)
+      // The end is the midnight after the last day.
+      .map((ev) => ({ ev, from: index(new Date(ev.start).getTime()), to: index(new Date(ev.end).getTime() - 1) }))
+      .filter((b) => b.to >= 0 && b.from <= last)
+      .map((b) => ({ ...b, from: Math.max(0, b.from), to: Math.min(last, b.to) }))
+      .sort((a, b) => a.from - b.from || b.to - b.from - (a.to - a.from));
+
+    const rowEnds: number[] = [];
+    const placed: Bar[] = [];
+    for (const item of items) {
+      let row = rowEnds.findIndex((end) => end < item.from);
+      if (row < 0) row = rowEnds.push(-1) - 1;
+      rowEnds[row] = item.to;
+      placed.push({ ...item, row });
+    }
+    const overflow = rowEnds.length > maxRows;
+    const shown = overflow ? maxRows - 1 : rowEnds.length;
+    return {
+      rows: overflow ? maxRows : rowEnds.length,
+      bars: placed.filter((b) => b.row < shown),
+      more: days.map((_, i) => placed.filter((b) => b.row >= shown && b.from <= i && b.to >= i).length),
+    };
+  });
+
   const nowTop = $derived(((clock.now.getHours() * 60 + clock.now.getMinutes()) - FIRST_HOUR * 60) * pxPerMin);
   const nowVisible = $derived(clock.now.getHours() >= FIRST_HOUR && clock.now.getHours() < LAST_HOUR);
 </script>
@@ -88,16 +133,29 @@
     </div>
   {/if}
 
-  <div class="allday">
-    <span class="label">cały dzień</span>
-    {#each days as d (d.toISOString())}
-      <div class="slot">
-        {#each eventsOn(d, events).filter((e) => e.allDay) as e (e.id)}
-          <span class="chip" style:--cal={e.color}>{e.title}</span>
-        {/each}
-      </div>
-    {/each}
-  </div>
+  {#if allDay.rows > 0}
+    <div class="allday" style:--rows={allDay.rows}>
+      <span class="label">cały<br />dzień</span>
+      {#each allDay.bars as b (b.ev.id)}
+        <button
+          class="bar"
+          style:--cal={b.ev.color}
+          style:grid-column="{b.from + 2} / {b.to + 3}"
+          style:grid-row={b.row + 1}
+          onclick={() => onselect?.(b.ev)}
+        >
+          {b.ev.title}
+        </button>
+      {/each}
+      {#each allDay.more as n, i (i)}
+        {#if n > 0}
+          <button class="more" style:grid-column={i + 2} style:grid-row={allDay.rows} onclick={() => showDay(days[i])}>
+            +{n} więcej
+          </button>
+        {/if}
+      {/each}
+    </div>
+  {/if}
 
   <div class="body" bind:clientHeight={bodyHeight}>
     <div class="hours">
@@ -111,17 +169,18 @@
           <i class="line" style:top="{(h - FIRST_HOUR) * 60 * pxPerMin}px"></i>
         {/each}
         {#each place(d) as p (p.ev.id)}
-          <div
+          <button
             class="event"
             style:--cal={p.ev.color}
             style:top="{p.top}px"
             style:height="{p.height}px"
             style:left="calc({(p.col / p.cols) * 100}% + 2px)"
             style:width="calc({100 / p.cols}% - 4px)"
+            onclick={() => onselect?.(p.ev)}
           >
             <span class="title">{p.ev.title}</span>
             {#if p.height > 34}<span class="time num">{hhmm(p.ev.start)}–{hhmm(p.ev.end)}</span>{/if}
-          </div>
+          </button>
         {/each}
         {#if nowVisible && sameDay(d, clock.now)}
           <i class="now" style:top="{nowTop}px"></i>
@@ -184,34 +243,46 @@
   }
 
   .allday {
-    min-height: 30px;
-    padding-bottom: 6px;
+    grid-template-rows: repeat(var(--rows), 24px);
+    row-gap: 3px;
+    padding-bottom: 8px;
     border-bottom: 1px solid var(--line);
   }
 
   .allday .label {
+    grid-column: 1;
+    grid-row: 1 / -1;
     align-self: center;
-    font-size: 11px;
+    padding-right: 10px;
+    font-size: 10.5px;
+    line-height: 1.15;
+    text-align: right;
     color: var(--faint);
   }
 
-  .slot {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 0 2px;
+  .bar,
+  .more {
     min-width: 0;
-  }
-
-  .chip {
-    padding: 3px 8px;
-    border-radius: 7px;
+    margin: 0 2px;
+    padding: 0 9px;
+    border-radius: 6px;
     font-size: 12.5px;
-    font-weight: 600;
-    background: color-mix(in srgb, var(--cal) 24%, transparent);
+    font-weight: 620;
+    text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .bar {
+    background: color-mix(in srgb, var(--cal) 30%, var(--card-solid));
+    box-shadow: inset 3px 0 0 var(--cal);
+  }
+
+  .more {
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--fill);
   }
 
   .body {
@@ -255,6 +326,12 @@
     border-left: 3px solid var(--cal);
     background: color-mix(in srgb, var(--cal) 22%, var(--card-solid));
     overflow: hidden;
+    text-align: left;
+  }
+
+  .event:active,
+  .bar:active {
+    opacity: 0.7;
   }
 
   .event .title {

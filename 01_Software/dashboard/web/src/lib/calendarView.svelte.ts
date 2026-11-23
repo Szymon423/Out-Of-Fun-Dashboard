@@ -26,6 +26,7 @@ export const calView = $state({
   mode: saved.mode,
   hidden: saved.hidden, // source ids switched off
   anchor: new Date(), // a day inside the period in view
+  selected: null as CalendarEvent | null, // shown in the event sheet (EventSheet.svelte)
 });
 
 function save(): void {

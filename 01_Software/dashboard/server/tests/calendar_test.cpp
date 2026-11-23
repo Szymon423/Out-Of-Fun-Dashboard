@@ -35,6 +35,8 @@ const char *kIcs = "BEGIN:VCALENDAR\r\n"
                    "UID:series-1\r\n"
                    "SUMMARY:Daily zespołu\r\n"
                    "LOCATION:Microsoft Teams Meeting\r\n"
+                   "DESCRIPTION:Plan na tydzień\\n\\n\\n\\nPytania? Pisz na czacie.\\n_______________\r\n"
+                   " _____________\\nSpotkanie w aplikacji Microsoft Teams\\nDołącz: https://teams.example/join\r\n"
                    "DTSTART;TZID=Central European Standard Time:20260303T090000\r\n"
                    "DTEND;TZID=Central European Standard Time:20260303T093000\r\n"
                    "RRULE:FREQ=WEEKLY;UNTIL=20260414T070000Z;INTERVAL=1;BYDAY=TU;WKST=MO\r\n"
@@ -110,12 +112,23 @@ int main() {
   CHECK(first["location"] == "Microsoft Teams Meeting");
   CHECK(first["calendarId"] == "m4t" && first["calendar"] == "M4T" && first["color"] == "#0a84ff");
   CHECK(first["allDay"] == false);
+  CHECK(first["description"] == "Plan na tydzień\n\nPytania? Pisz na czacie."); // without the Teams footer
   CHECK((*find(events, "2026-03-24T12:00:00Z"))["title"] == "Daily zespołu (później)");
 
   // All-day: local midnight without an offset, the end exclusive.
   const json *leave = find(events, "2026-03-20T00:00:00");
   CHECK(leave && (*leave)["allDay"] == true && (*leave)["end"] == "2026-03-21T00:00:00");
   CHECK(!leave->contains("location"));
+  CHECK(!leave->contains("description"));
+
+  // Descriptions: the footer goes, empty lines squeeze, long text ends whole.
+  CHECK(dash::clean_description("  \n\n") == "");
+  CHECK(dash::clean_description("Linia 1\r\n\r\n\r\nLinia 2\r\n") == "Linia 1\n\nLinia 2");
+  CHECK(dash::clean_description("________________\nTeams") == "");
+  const std::string long_text = dash::clean_description(std::string(3000, 'x') + "ż");
+  CHECK(long_text.size() <= 2000 + 3 && long_text.ends_with("…"));
+  const std::string polish = dash::clean_description(std::string(1999, 'x') + "żółw");
+  CHECK(polish == std::string(1999, 'x') + "…"); // "ż" does not fit whole: dropped, not cut in half
 
   // Five of the series, the moved one, the all-day one; nothing from September.
   CHECK(events.size() == 7 - 1); // 3 Mar, 10 Mar, 24 Mar moved, 7 Apr, 14 Apr, leave

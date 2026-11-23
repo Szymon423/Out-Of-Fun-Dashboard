@@ -28,6 +28,13 @@ namespace dash {
  */
 nlohmann::json ics_events(const std::string &ics, const CalendarSettings &source, std::time_t from, std::time_t to);
 
+/**
+ * An event description for the screen: Outlook's meeting footer (from the first line of
+ * underscores on: "Microsoft Teams meeting", join links, dial-in numbers) cut off, runs of
+ * empty lines squeezed, at most 2000 characters. Empty when nothing is left.
+ */
+std::string clean_description(std::string_view text);
+
 /** Publishes "calendars" and "events" in the background until destroyed. */
 class CalendarProvider {
 public:

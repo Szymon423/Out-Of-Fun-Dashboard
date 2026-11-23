@@ -102,6 +102,9 @@ void add_instance(icalcomponent *event, icaltime_span *span, void *data) {
       {"color", e->source->color},
   };
   if (const char *location = icalcomponent_get_location(event); location && *location) item["location"] = location;
+  if (const char *description = icalcomponent_get_description(event); description) {
+    if (std::string text = clean_description(description); !text.empty()) item["description"] = std::move(text);
+  }
   e->out->push_back(std::move(item));
 }
 
@@ -152,7 +155,12 @@ void run(std::stop_token stop, Hub &hub, const std::vector<CalendarSettings> &ca
       } catch (const std::exception &e) {
         all_ok = false;
         if (health[calendar.id] != Health::failing) {
-          log_warning("calendar: {} failed, keeping its last events: {}", calendar.name, e.what());
+          // The link is secret: the error text names it, the journal must not.
+          std::string reason = e.what();
+          for (auto at = reason.find(calendar.url); at != std::string::npos; at = reason.find(calendar.url)) {
+            reason.replace(at, calendar.url.size(), "<link>");
+          }
+          log_warning("calendar: {} failed, keeping its last events: {}", calendar.name, reason);
         }
         health[calendar.id] = Health::failing;
       }
@@ -180,10 +188,39 @@ void run(std::stop_token stop, Hub &hub, const std::vector<CalendarSettings> &ca
 
 } // namespace
 
+std::string clean_description(std::string_view text) {
+  constexpr std::size_t kMax = 2000;
+  std::string out;
+  int empty_run = 0;
+  std::size_t pos = 0;
+  while (pos <= text.size()) {
+    const std::size_t eol = std::min(text.find('\n', pos), text.size());
+    std::string_view line = text.substr(pos, eol - pos);
+    pos = eol + 1;
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) line.remove_suffix(1);
+    if (line.find("__________") != std::string_view::npos) break; // Outlook's meeting footer starts here
+    if (line.empty()) {
+      ++empty_run;
+      continue;
+    }
+    if (!out.empty()) out += empty_run > 0 ? "\n\n" : "\n";
+    empty_run = 0;
+    out += line;
+    if (out.size() > kMax) {
+      out.resize(kMax);
+      while (!out.empty() && (static_cast<unsigned char>(out.back()) & 0xC0) == 0x80) out.pop_back(); // whole UTF-8 only
+      if (!out.empty() && static_cast<unsigned char>(out.back()) >= 0xC0) out.pop_back();
+      out += "…";
+      break;
+    }
+  }
+  return out;
+}
+
 json ics_events(const std::string &ics, const CalendarSettings &source, std::time_t from, std::time_t to) {
   const std::unique_ptr<icalcomponent, ComponentDeleter> calendar(icalparser_parse_string(ics.c_str()));
   if (!calendar || icalcomponent_isa(calendar.get()) != ICAL_VCALENDAR_COMPONENT) {
-    throw std::runtime_error("not an iCalendar file");
+    throw std::runtime_error(ics.empty() ? "the link gave an empty answer" : "not an iCalendar file");
   }
   icalcomponent *cal = calendar.get();
 

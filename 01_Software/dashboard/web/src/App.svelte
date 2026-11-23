@@ -4,6 +4,7 @@
   import FlaskConical from '@lucide/svelte/icons/flask-conical';
   import WifiOff from '@lucide/svelte/icons/wifi-off';
   import Backdrop from './lib/components/Backdrop.svelte';
+  import EventSheet from './lib/components/calendar/EventSheet.svelte';
   import ControlBar from './lib/components/ControlBar.svelte';
   import Pager from './lib/components/Pager.svelte';
   import Screensaver from './lib/components/Screensaver.svelte';
@@ -26,6 +27,7 @@
   <div class="world" class:hidden={covered && !nav.waking}>
     <Backdrop paused={covered} />
     <Pager />
+    <EventSheet />
     <ControlBar />
   </div>
   <Screensaver bind:covered />
