@@ -7,6 +7,9 @@ export interface WeatherNow {
   code: number; // WMO weather code, as given by Open-Meteo
   isDay: boolean;
   windKmh: number;
+  gustKmh: number;
+  windDir: number; // degrees the wind comes from, 0 = north
+  pressure: number; // hPa, at sea level
   humidity: number; // %
 }
 
@@ -16,6 +19,7 @@ export interface WeatherHour {
   code: number;
   isDay: boolean;
   precipProb: number; // %
+  precipMm: number; // in that hour
 }
 
 export interface WeatherDay {
@@ -30,7 +34,18 @@ export interface Weather {
   updated: string; // ISO 8601
   place: string;
   now: WeatherNow;
-  today: { min: number; max: number; sunrise: string; sunset: string; precipProb: number };
+  today: {
+    min: number;
+    max: number;
+    sunrise: string;
+    sunset: string;
+    precipProb: number; // %
+    precipMm: number; // the day's total
+    uvMax: number;
+    uvPeak: string | null; // "HH:MM" of the strongest sun, null when it stays low
+    daylightMin: number;
+    pressureTrend: 'up' | 'down' | 'steady'; // over the next three hours
+  };
   hours: WeatherHour[]; // the next hours, starting with the coming full hour
   days: WeatherDay[]; // the next days, starting tomorrow
 }
@@ -65,6 +80,31 @@ export interface NowPlaying {
   readAt: number; // ... at this time, epoch ms, so the UI can move on by itself
   durationMs: number;
   device: string;
+  volume: number | null; // of the device, 0-100; null when it cannot be set
+}
+
+/** A playlist, an album or the liked songs, playable by its spotify: URI. */
+export interface LibraryItem {
+  name: string;
+  uri: string;
+  imageUrl: string | null;
+  detail: string; // "22 utwory", or the artist of an album
+}
+
+/** The Spotify library for the music page, refreshed by the server every 30 min. */
+export interface MusicLibrary {
+  playlists: LibraryItem[];
+  recent: LibraryItem[]; // albums played lately
+  likedUri: string | null;
+}
+
+/** A Spotify Connect device, from GET /api/music/devices. */
+export interface SpotifyDevice {
+  id: string;
+  name: string;
+  type: string; // Computer, Smartphone, Speaker, TV, ...
+  isActive: boolean;
+  volume: number | null;
 }
 
 /** A desk light: a plain on/off lamp, or the RGBW LED strip. */
@@ -142,9 +182,19 @@ export interface DashboardState {
   printer: Printer | null;
   photos: Photos | null;
   display: Display | null;
+  musicLibrary: MusicLibrary | null;
 }
 
-export type Topic = 'weather' | 'calendars' | 'events' | 'music' | 'lights' | 'printer' | 'photos' | 'display';
+export type Topic =
+  | 'weather'
+  | 'calendars'
+  | 'events'
+  | 'music'
+  | 'lights'
+  | 'printer'
+  | 'photos'
+  | 'display'
+  | 'musicLibrary';
 export interface Update {
   topic: Topic;
   data: unknown;

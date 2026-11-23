@@ -135,6 +135,62 @@ HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spot
     }
   });
 
+  // The Spotify library and devices (spotify.hpp). Registered before /api/music/:action.
+  auto spotify_result = [](httplib::Response &res, Spotify::Result result) {
+    switch (result) {
+    case Spotify::Result::ok:
+      res.status = 204;
+      break;
+    case Spotify::Result::not_signed_in:
+      send_error(res, 503, "Spotify is not signed in (tools/spotify-login.py)");
+      break;
+    case Spotify::Result::no_device:
+      send_error(res, 409, "no Spotify device is active");
+      break;
+    case Spotify::Result::failed:
+      send_error(res, 502, "Spotify refused or did not answer");
+      break;
+    }
+  };
+  auto body_field = [](const httplib::Request &req, const char *key) -> json {
+    const json body = json::parse(req.body, nullptr, false);
+    return body.is_object() && body.contains(key) ? body[key] : json(nullptr);
+  };
+
+  server.Get("/api/music/devices", [spotify](const httplib::Request &, httplib::Response &res) {
+    if (!spotify) return send_error(res, 503, "Spotify is not configured");
+    const json devices = spotify->devices();
+    if (devices.is_null()) return send_error(res, 502, "Spotify did not list the devices");
+    send_json(res, 200, devices);
+  });
+
+  server.Post("/api/music/context", [spotify, spotify_result, body_field](const httplib::Request &req,
+                                                                        httplib::Response &res) {
+    const json uri = body_field(req, "uri");
+    if (!uri.is_string() || !uri.get<std::string>().starts_with("spotify:")) {
+      return send_error(res, 400, R"(expected {"uri": "spotify:..."})");
+    }
+    if (!spotify) return send_error(res, 503, "Spotify is not configured");
+    const json device = body_field(req, "deviceId");
+    spotify_result(res, spotify->play_context(uri.get<std::string>(), device.is_string() ? device.get<std::string>() : ""));
+  });
+
+  server.Post("/api/music/device", [spotify, spotify_result, body_field](const httplib::Request &req,
+                                                                       httplib::Response &res) {
+    const json id = body_field(req, "id");
+    if (!id.is_string() || id.get<std::string>().empty()) return send_error(res, 400, R"(expected {"id": "..."})");
+    if (!spotify) return send_error(res, 503, "Spotify is not configured");
+    spotify_result(res, spotify->transfer(id.get<std::string>()));
+  });
+
+  server.Post("/api/music/volume", [spotify, spotify_result, body_field](const httplib::Request &req,
+                                                                       httplib::Response &res) {
+    const json percent = body_field(req, "percent");
+    if (!percent.is_number()) return send_error(res, 400, R"(expected {"percent": 0-100})");
+    if (!spotify) return send_error(res, 503, "Spotify is not configured");
+    spotify_result(res, spotify->volume(static_cast<int>(std::lround(percent.get<double>()))));
+  });
+
   server.Post("/api/music/:action", [spotify](const httplib::Request &req, httplib::Response &res) {
     const std::string &action = req.path_params.at("action");
     if (action != "play" && action != "pause" && action != "next" && action != "previous") {

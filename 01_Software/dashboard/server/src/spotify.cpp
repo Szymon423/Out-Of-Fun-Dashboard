@@ -1,5 +1,6 @@
 #include "spotify.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 
@@ -85,12 +86,59 @@ json now_playing(const json &player, std::int64_t now) {
       {"readAt", now},
       {"durationMs", integer(*item, "duration_ms")},
       {"device", player.contains("device") ? text(player["device"], "name") : std::string()},
+      // Phones and some speakers do not let the API set their volume (supports_volume false).
+      {"volume", player.contains("device") && player["device"].value("supports_volume", true) &&
+                         player["device"].contains("volume_percent") && player["device"]["volume_percent"].is_number()
+                     ? player["device"]["volume_percent"]
+                     : json(nullptr)},
   };
+}
+
+namespace {
+
+std::string tracks_label(std::int64_t n) {
+  const std::int64_t last = n % 10;
+  const std::int64_t last_two = n % 100;
+  const char *word = n == 1 ? "utwór" : last >= 2 && last <= 4 && !(last_two >= 12 && last_two <= 14) ? "utwory" : "utworów";
+  return std::format("{} {}", n, word);
+}
+
+} // namespace
+
+json music_library(const json &playlists, const json &recent, const std::string &user_id) {
+  json lists = json::array();
+  for (const json &p : playlists.value("items", json::array())) {
+    if (!p.is_object() || text(p, "uri").empty()) continue;
+    const json tracks = p.value("tracks", json::object());
+    lists.push_back({{"name", text(p, "name")},
+                     {"uri", text(p, "uri")},
+                     {"imageUrl", cover(p.value("images", json::array()))},
+                     {"detail", tracks.contains("total") ? tracks_label(integer(tracks, "total")) : std::string()}});
+  }
+
+  json albums = json::array();
+  std::vector<std::string> seen;
+  for (const json &item : recent.value("items", json::array())) {
+    if (albums.size() >= 8) break;
+    const json album = item.value("track", json::object()).value("album", json::object());
+    const std::string uri = text(album, "uri");
+    if (uri.empty() || std::ranges::find(seen, uri) != seen.end()) continue;
+    seen.push_back(uri);
+    const json artists = album.value("artists", json::array());
+    albums.push_back({{"name", text(album, "name")},
+                      {"uri", uri},
+                      {"imageUrl", cover(album.value("images", json::array()))},
+                      {"detail", artists.empty() ? std::string() : text(artists[0], "name")}});
+  }
+
+  return {{"playlists", lists},
+          {"recent", albums},
+          {"likedUri", user_id.empty() ? json(nullptr) : json("spotify:user:" + user_id + ":collection")}};
 }
 
 bool worth_publishing(const json &shown, const json &next) {
   if (shown.is_null() || next.is_null()) return shown.is_null() != next.is_null();
-  for (const char *key : {"title", "artist", "album", "artUrl", "isPlaying", "durationMs", "device"}) {
+  for (const char *key : {"title", "artist", "album", "artUrl", "isPlaying", "durationMs", "device", "volume"}) {
     if (shown[key] != next[key]) return true;
   }
   // Where the page thinks the track is now, against where Spotify says it is.
@@ -135,10 +183,19 @@ void Spotify::save_refresh_token(const std::string &token) {
   fs::permissions(tmp, fs::perms::owner_read | fs::perms::owner_write, ec);
   fs::rename(tmp, token_file_, ec);
   if (ec) log_warning("spotify: cannot save {}: {}", token_file_.string(), ec.message());
+  token_file_time_ = fs::last_write_time(token_file_, ec); // our own write is not a new login
 }
 
 std::string Spotify::access_token() {
   const std::lock_guard lock(token_mutex_);
+  // A changed file is a new login (tools/spotify-login.py): drop the old one and use it.
+  std::error_code ec;
+  if (const auto time = fs::last_write_time(token_file_, ec); !ec && time != token_file_time_) {
+    token_file_time_ = time;
+    refresh_token_.clear();
+    access_token_.clear();
+    library_stale_ = true;
+  }
   if (refresh_token_.empty()) load_refresh_token();
   if (refresh_token_.empty()) return {};
   if (!access_token_.empty() && std::chrono::steady_clock::now() < access_expires_) return access_token_;
@@ -174,60 +231,122 @@ std::string Spotify::access_token() {
   }
 }
 
-Spotify::Result Spotify::command(std::string_view action) {
-  struct Call {
-    std::string_view action;
-    const char *method;
-    const char *path;
-  };
-  static constexpr Call kCalls[] = {
-      {"play", "PUT", "/me/player/play"},
-      {"pause", "PUT", "/me/player/pause"},
-      {"next", "POST", "/me/player/next"},
-      {"previous", "POST", "/me/player/previous"},
-  };
-  const Call *call = nullptr;
-  for (const Call &c : kCalls) {
-    if (c.action == action) call = &c;
-  }
-  if (!call) return Result::failed;
-
-  for (int attempt = 0; attempt < 2; ++attempt) {
+HttpResponse Spotify::api(const std::string &method, const std::string &path, const std::string &json_body) {
+  for (int attempt = 0;; ++attempt) {
+    const std::string token = access_token();
+    if (token.empty()) throw NotSignedIn{};
     try {
-      const std::string token = access_token();
-      if (token.empty()) return Result::not_signed_in;
-      http_fetch({.url = std::string(kApi) + call->path,
-                  .headers = {"Authorization: Bearer " + token},
-                  .method = call->method,
-                  .body = {},
-                  .content_type = {},
-                  .timeout = 10s});
-      {
-        const std::lock_guard lock(wake_mutex_);
-        poke_ = true;
-      }
-      wake_.notify_all();
-      return Result::ok;
+      const bool sends = method != "GET";
+      return http_fetch({.url = std::string(kApi) + path,
+                         .headers = {"Authorization: Bearer " + token},
+                         .method = method,
+                         .body = json_body,
+                         .content_type = sends && !json_body.empty() ? "application/json" : "",
+                         .timeout = 10s});
     } catch (const FetchError &e) {
-      if (e.status == 401 && attempt == 0) { // the access token ran out early: renew and retry
-        const std::lock_guard lock(token_mutex_);
-        access_token_.clear();
-        continue;
-      }
-      if (e.status == 404) return Result::no_device; // NO_ACTIVE_DEVICE
-      log_warning("spotify: {} failed: {}", action, e.what());
-      return Result::failed;
-    } catch (const std::exception &e) {
-      log_warning("spotify: {} failed: {}", action, e.what());
-      return Result::failed;
+      if (e.status != 401 || attempt > 0) throw;
+      const std::lock_guard lock(token_mutex_); // the access token ran out early: renew, retry
+      access_token_.clear();
     }
   }
+}
+
+void Spotify::poke() {
+  {
+    const std::lock_guard lock(wake_mutex_);
+    poke_ = true;
+  }
+  wake_.notify_all();
+}
+
+Spotify::Result Spotify::act(std::string_view what, const std::string &method, const std::string &path,
+                             const std::string &body) {
+  try {
+    api(method, path, body);
+    poke();
+    return Result::ok;
+  } catch (const NotSignedIn &) {
+    return Result::not_signed_in;
+  } catch (const FetchError &e) {
+    if (e.status == 404) return Result::no_device; // NO_ACTIVE_DEVICE
+    log_warning("spotify: {} failed: {}", what, e.what());
+    return Result::failed;
+  } catch (const std::exception &e) {
+    log_warning("spotify: {} failed: {}", what, e.what());
+    return Result::failed;
+  }
+}
+
+Spotify::Result Spotify::command(std::string_view action) {
+  if (action == "play") return act(action, "PUT", "/me/player/play");
+  if (action == "pause") return act(action, "PUT", "/me/player/pause");
+  if (action == "next") return act(action, "POST", "/me/player/next");
+  if (action == "previous") return act(action, "POST", "/me/player/previous");
   return Result::failed;
+}
+
+Spotify::Result Spotify::play_context(const std::string &uri, const std::string &device_id) {
+  const std::string path = device_id.empty() ? "/me/player/play" : "/me/player/play?device_id=" + url_encode(device_id);
+  return act("play " + uri, "PUT", path, json{{"context_uri", uri}}.dump());
+}
+
+Spotify::Result Spotify::transfer(const std::string &device_id) {
+  return act("transfer", "PUT", "/me/player", json{{"device_ids", {device_id}}, {"play", true}}.dump());
+}
+
+Spotify::Result Spotify::volume(int percent) {
+  return act("volume", "PUT", std::format("/me/player/volume?volume_percent={}", std::clamp(percent, 0, 100)));
+}
+
+json Spotify::devices() {
+  try {
+    const json answer = json::parse(api("GET", "/me/player/devices").body);
+    json out = json::array();
+    for (const json &d : answer.value("devices", json::array())) {
+      if (d.value("is_restricted", false)) continue; // cannot be controlled through the API
+      out.push_back({{"id", text(d, "id")},
+                     {"name", text(d, "name")},
+                     {"type", text(d, "type")},
+                     {"isActive", d.value("is_active", false)},
+                     {"volume", d.value("supports_volume", true) && d.contains("volume_percent") &&
+                                        d["volume_percent"].is_number()
+                                    ? d["volume_percent"]
+                                    : json(nullptr)}});
+    }
+    return out;
+  } catch (const NotSignedIn &) {
+    return nullptr;
+  } catch (const std::exception &e) {
+    log_warning("spotify: listing devices failed: {}", e.what());
+    return nullptr;
+  }
+}
+
+void Spotify::refresh_library() {
+  try {
+    const json playlists = json::parse(api("GET", "/me/playlists?limit=24").body);
+    const json recent = json::parse(api("GET", "/me/player/recently-played?limit=50").body);
+    const json me = json::parse(api("GET", "/me").body);
+    hub_.publish("musicLibrary", music_library(playlists, recent, text(me, "id")));
+  } catch (const NotSignedIn &) {
+    hub_.publish("musicLibrary", nullptr);
+  } catch (const FetchError &e) {
+    if (e.status == 401 || e.status == 403) {
+      log_warning("spotify: no playlists, the login lacks the scopes for them; sign in again with "
+                  "tools/spotify-login.py");
+      hub_.publish("musicLibrary", nullptr);
+      return;
+    }
+    throw;
+  }
 }
 
 void Spotify::run(std::stop_token stop) {
   json shown = nullptr;
   hub_.publish("music", shown);
+  hub_.publish("musicLibrary", nullptr);
+  constexpr auto kLibraryEvery = 30min;
+  auto library_due = std::chrono::steady_clock::now();
   // At boot the network comes up about a second after the server: retry soon at first.
   constexpr std::chrono::milliseconds kFirstRetry = 5s;
   std::chrono::milliseconds retry = kFirstRetry;
@@ -252,6 +371,11 @@ void Spotify::run(std::stop_token stop) {
                                  ? json(nullptr)
                                  : now_playing(json::parse(response.body), now_ms());
         if (worth_publishing(shown, playing)) hub_.publish("music", shown = playing);
+        if (library_stale_.exchange(false)) library_due = std::chrono::steady_clock::now();
+        if (std::chrono::steady_clock::now() >= library_due) {
+          refresh_library();
+          library_due = std::chrono::steady_clock::now() + kLibraryEvery;
+        }
         if (failing) log_info("spotify: reading the player again");
         failing = false;
         if (playing.is_object() && playing["isPlaying"].get<bool>()) {

@@ -12,12 +12,12 @@ int main() {
 
   // Every topic is there from the start, null or empty.
   const json start = hub.snapshot();
-  CHECK(start.size() == 8);
+  CHECK(start.size() == 9);
   CHECK(start["weather"].is_null());
   CHECK(start["lights"] == json::array());
 
   std::uint64_t seq = 0;
-  CHECK(hub.snapshot_messages(seq).size() == 8);
+  CHECK(hub.snapshot_messages(seq).size() == 9);
   CHECK(seq == 0);
 
   // A change reaches a waiting stream; the same data again does not.

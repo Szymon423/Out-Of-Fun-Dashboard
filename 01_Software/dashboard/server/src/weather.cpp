@@ -24,6 +24,20 @@ constexpr auto kFirstRetry = 5s; // then twice as long each time; at boot the ne
 double num(const json &j) { return j.is_number() ? j.get<double>() : 0.0; }
 int whole(const json &j) { return j.is_number() ? static_cast<int>(std::lround(j.get<double>())) : 0; }
 
+/** A value of a block, or 0 when the answer does not have it (an older answer, another model). */
+double field(const json &block, const char *key) {
+  const auto it = block.find(key);
+  return it != block.end() ? num(*it) : 0.0;
+}
+
+/** The i-th value of a series, or 0 likewise. */
+double series(const json &block, const char *key, std::size_t i) {
+  const auto it = block.find(key);
+  return it != block.end() && it->is_array() && i < it->size() ? num((*it)[i]) : 0.0;
+}
+
+double one_decimal(double v) { return std::round(v * 10.0) / 10.0; }
+
 std::string local_now() {
   const std::time_t t = std::time(nullptr);
   std::tm tm{};
@@ -119,10 +133,11 @@ void run(std::stop_token stop, Hub &hub, Location location) {
 std::string open_meteo_url(double latitude, double longitude) {
   return std::format("https://api.open-meteo.com/v1/forecast?latitude={:.4f}&longitude={:.4f}"
                      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,"
-                     "wind_speed_10m"
-                     "&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
+                     "wind_speed_10m,wind_gusts_10m,wind_direction_10m,pressure_msl"
+                     "&hourly=temperature_2m,weather_code,precipitation_probability,precipitation,is_day,uv_index,"
+                     "pressure_msl"
                      "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,"
-                     "precipitation_probability_max"
+                     "precipitation_probability_max,precipitation_sum,uv_index_max,daylight_duration"
                      "&timezone=auto&forecast_days={}",
                      latitude, longitude, kDays + 1);
 }
@@ -136,6 +151,9 @@ json parse_open_meteo(const json &forecast, const std::string &place, const std:
       {"code", whole(current.at("weather_code"))},
       {"isDay", whole(current.at("is_day")) == 1},
       {"windKmh", num(current.at("wind_speed_10m"))},
+      {"gustKmh", field(current, "wind_gusts_10m")},
+      {"windDir", static_cast<int>(std::lround(field(current, "wind_direction_10m")))}, // where it blows from, °
+      {"pressure", static_cast<int>(std::lround(field(current, "pressure_msl")))},     // hPa
       {"humidity", whole(current.at("relative_humidity_2m"))},
   };
 
@@ -146,12 +164,39 @@ json parse_open_meteo(const json &forecast, const std::string &place, const std:
   while (today < dates.size() && dates[today].get<std::string>() < today_date) ++today;
   if (today >= dates.size()) throw std::runtime_error("the forecast does not reach today");
 
+  const json &hourly = forecast.at("hourly");
+  const json &times = hourly.at("time");
+
+  // The hour of today's strongest sun, and where the pressure goes in the next three hours.
+  json uv_peak = nullptr;
+  double uv_best = 0;
+  std::size_t next_hour = times.size();
+  for (std::size_t i = 0; i < times.size(); ++i) {
+    const std::string time = times[i].get<std::string>();
+    if (time.starts_with(today_date) && series(hourly, "uv_index", i) > uv_best) {
+      uv_best = series(hourly, "uv_index", i);
+      uv_peak = time.substr(11, 5);
+    }
+    if (next_hour == times.size() && time > now_local) next_hour = i;
+  }
+  std::string pressure_trend = "steady";
+  if (next_hour + 2 < times.size() && current.contains("pressure_msl")) {
+    const double change = series(hourly, "pressure_msl", next_hour + 2) - field(current, "pressure_msl");
+    if (change > 1.0) pressure_trend = "up";
+    if (change < -1.0) pressure_trend = "down";
+  }
+
   const json today_json = {
       {"min", num(daily.at("temperature_2m_min")[today])},
       {"max", num(daily.at("temperature_2m_max")[today])},
       {"sunrise", daily.at("sunrise")[today]},
       {"sunset", daily.at("sunset")[today]},
       {"precipProb", whole(daily.at("precipitation_probability_max")[today])},
+      {"precipMm", one_decimal(series(daily, "precipitation_sum", today))},
+      {"uvMax", one_decimal(series(daily, "uv_index_max", today))},
+      {"uvPeak", uv_peak}, // "HH:MM", null when the sun stays too low to count
+      {"daylightMin", static_cast<int>(std::lround(series(daily, "daylight_duration", today) / 60.0))},
+      {"pressureTrend", pressure_trend},
   };
 
   json days = json::array();
@@ -165,8 +210,6 @@ json parse_open_meteo(const json &forecast, const std::string &place, const std:
     });
   }
 
-  const json &hourly = forecast.at("hourly");
-  const json &times = hourly.at("time");
   json hours = json::array();
   for (std::size_t i = 0; i < times.size() && hours.size() < kHours; ++i) {
     if (times[i].get<std::string>() <= now_local) continue; // from the coming full hour
@@ -176,6 +219,7 @@ json parse_open_meteo(const json &forecast, const std::string &place, const std:
         {"code", whole(hourly.at("weather_code")[i])},
         {"isDay", whole(hourly.at("is_day")[i]) == 1},
         {"precipProb", whole(hourly.at("precipitation_probability")[i])},
+        {"precipMm", one_decimal(series(hourly, "precipitation", i))},
     });
   }
 

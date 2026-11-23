@@ -30,7 +30,9 @@ import webbrowser
 from pathlib import Path
 
 REDIRECT_URI = "http://127.0.0.1:8888/callback"
-SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+# Playback, plus the playlists and recently played albums for the music page's library.
+SCOPES = ("user-read-playback-state user-modify-playback-state user-read-currently-playing "
+          "playlist-read-private playlist-read-collaborative user-read-recently-played")
 AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 PI_DATA = "/data/dashboard"

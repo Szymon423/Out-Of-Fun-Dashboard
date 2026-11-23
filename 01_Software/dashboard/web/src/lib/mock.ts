@@ -13,8 +13,8 @@ function iso(d: Date): string {
 }
 
 function hours(): WeatherHour[] {
-  const codes = [3, 3, 61, 63, 61, 3, 2, 2, 1, 0, 0, 1];
-  const temps = [5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0];
+  const codes = [3, 3, 61, 63, 61, 3, 2, 2, 1, 0, 0, 1, 1, 2, 2, 3, 3, 61, 61, 3, 2, 1, 1, 0];
+  const temps = [5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, -1, -1, 0, 1, 3, 4, 6, 7, 7, 6, 5, 4];
   return codes.map((code, i) => {
     const t = at(i + 1);
     const h = t.getHours();
@@ -24,6 +24,7 @@ function hours(): WeatherHour[] {
       code,
       isDay: h >= 7 && h < 16,
       precipProb: code >= 61 ? 60 + i * 3 : i < 6 ? 15 : 5,
+      precipMm: code === 63 ? 1.2 : code === 61 ? 0.4 : 0,
     };
   });
 }
@@ -152,8 +153,19 @@ export function mockState(): DashboardState {
     weather: {
       updated: iso(new Date()),
       place: 'Warszawa',
-      now: { temp: 4.6, feelsLike: 1.2, code: 3, isDay: true, windKmh: 14, humidity: 86 },
-      today: { min: 1.8, max: 6.3, sunrise: iso(sunrise), sunset: iso(sunset), precipProb: 70 },
+      now: { temp: 4.6, feelsLike: 1.2, code: 3, isDay: true, windKmh: 14, gustKmh: 31, windDir: 250, pressure: 1009, humidity: 86 },
+      today: {
+        min: 1.8,
+        max: 6.3,
+        sunrise: iso(sunrise),
+        sunset: iso(sunset),
+        precipProb: 70,
+        precipMm: 3.4,
+        uvMax: 0.9,
+        uvPeak: '12:00',
+        daylightMin: 501,
+        pressureTrend: 'down',
+      },
       hours: hours(),
       days: days(),
     },
@@ -169,6 +181,28 @@ export function mockState(): DashboardState {
       readAt: Date.now(),
       durationMs: 243_000,
       device: 'Głośnik w salonie',
+      volume: 45,
+    },
+    musicLibrary: {
+      playlists: [
+        'Do pracy',
+        'Wieczór',
+        'Rower',
+        'Lo-fi',
+        'Odkryj w tym tygodniu',
+        'Polski rock',
+        'Synthwave',
+        'Kuchnia',
+        'Na drogę',
+        'Klasyka',
+      ].map((name, i) => ({ name, uri: `spotify:playlist:mock${i}`, imageUrl: null, detail: `${12 + i * 7} utworów` })),
+      recent: [
+        ['Hurry Up, We’re Dreaming', 'M83'],
+        ['Random Access Memories', 'Daft Punk'],
+        ['In Rainbows', 'Radiohead'],
+        ['Currents', 'Tame Impala'],
+      ].map(([name, artist], i) => ({ name, uri: `spotify:album:mock${i}`, imageUrl: null, detail: artist })),
+      likedUri: 'spotify:user:mock:collection',
     },
     lights: [
       { id: 'desk-left', name: 'Lampka lewa', kind: 'switch', on: true },

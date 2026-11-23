@@ -51,5 +51,39 @@ int main(int argc, char **argv) {
   const json tomorrow = dash::parse_open_meteo(forecast, "Warszawa", "2026-11-24T00:05", "x");
   CHECK(tomorrow["days"][0]["date"] == "2026-11-25");
   CHECK(tomorrow["days"].size() == 6);
+
+  // Fields asked for later than the saved answer: 0 or "steady" when missing, not an error.
+  CHECK(w["now"]["gustKmh"] == 0.0 && w["today"]["uvPeak"].is_null());
+  CHECK(w["today"]["pressureTrend"] == "steady");
+
+  // ... and read when present: UV peak of today, the pressure in three hours, rain amounts.
+  json more = forecast;
+  more["current"]["wind_gusts_10m"] = 34.6;
+  more["current"]["wind_direction_10m"] = 247.4;
+  more["current"]["pressure_msl"] = 1012.4;
+  const std::size_t n = more["hourly"]["time"].size();
+  json uv = json::array(), pressure = json::array(), rain = json::array();
+  for (std::size_t i = 0; i < n; ++i) {
+    const std::string t = more["hourly"]["time"][i];
+    uv.push_back(t == "2026-11-23T12:00" ? 1.35 : t.starts_with("2026-11-23T1") ? 0.5 : 0.0);
+    pressure.push_back(t == "2026-11-23T18:00" ? 1009.0 : 1012.0);
+    rain.push_back(t == "2026-11-23T16:00" ? 0.44 : 0.0);
+  }
+  more["hourly"]["uv_index"] = uv;
+  more["hourly"]["pressure_msl"] = pressure;
+  more["hourly"]["precipitation"] = rain;
+  more["daily"]["uv_index_max"] = json::array({1.35, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9});
+  more["daily"]["precipitation_sum"] = json::array({2.24, 0, 0, 0, 0, 0, 0, 0});
+  more["daily"]["daylight_duration"] = json::array({30300.0, 0, 0, 0, 0, 0, 0, 0});
+  const json m = dash::parse_open_meteo(more, "Warszawa", "2026-11-23T15:20", "x");
+  CHECK(m["now"]["gustKmh"] == 34.6);
+  CHECK(m["now"]["windDir"] == 247);
+  CHECK(m["now"]["pressure"] == 1012);
+  CHECK(m["today"]["uvMax"] == 1.4);
+  CHECK(m["today"]["uvPeak"] == "12:00");
+  CHECK(m["today"]["precipMm"] == 2.2);
+  CHECK(m["today"]["daylightMin"] == 505);
+  CHECK(m["today"]["pressureTrend"] == "down"); // 1012.4 now, 1009 at 18:00 (16:00 + 2 h)
+  CHECK(m["hours"][0]["precipMm"] == 0.4);
   return 0;
 }

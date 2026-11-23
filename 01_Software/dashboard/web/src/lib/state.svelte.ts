@@ -10,9 +10,11 @@ import type {
   DashboardState,
   Display,
   Light,
+  MusicLibrary,
   NowPlaying,
   Photos,
   Printer,
+  SpotifyDevice,
   Update,
 } from './types';
 
@@ -25,6 +27,7 @@ export const dash: DashboardState = $state({
   printer: null,
   photos: null,
   display: null,
+  musicLibrary: null,
 });
 
 export const connection = $state({ mode: 'connecting' as 'connecting' | 'live' | 'mock' | 'offline' });
@@ -61,6 +64,9 @@ function apply(update: Update): void {
       break;
     case 'display':
       dash.display = update.data as Display | null;
+      break;
+    case 'musicLibrary':
+      dash.musicLibrary = update.data as MusicLibrary | null;
       break;
   }
 }
@@ -131,6 +137,39 @@ export function music(action: 'play' | 'pause' | 'next' | 'previous'): void {
     m.isPlaying = action === 'play';
   }
   void post(`/api/music/${action}`);
+}
+
+/** Plays a playlist or album; on `deviceId` when nothing is active yet. */
+export function playContext(uri: string, deviceId?: string): void {
+  void post('/api/music/context', deviceId ? { uri, deviceId } : { uri });
+}
+
+/** Moves the playback to another Spotify device. */
+export function transferTo(deviceId: string): void {
+  void post('/api/music/device', { id: deviceId });
+}
+
+/** Volume of the playing device, 0-100. */
+export function setVolume(percent: number): void {
+  if (dash.music) dash.music.volume = percent;
+  void post('/api/music/volume', { percent });
+}
+
+/** The Spotify devices to choose from; fetched when the picker opens. */
+export async function fetchDevices(): Promise<SpotifyDevice[]> {
+  if (connection.mode === 'mock') {
+    return [
+      { id: 'mock-speaker', name: 'Głośnik w salonie', type: 'Speaker', isActive: true, volume: 45 },
+      { id: 'mock-pc', name: 'fedora', type: 'Computer', isActive: false, volume: 80 },
+      { id: 'mock-phone', name: 'iPhone', type: 'Smartphone', isActive: false, volume: 100 },
+    ];
+  }
+  try {
+    const res = await fetch('/api/music/devices');
+    return res.ok ? ((await res.json()) as SpotifyDevice[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Backlight brightness of the screen, 0-100; the server writes it to /sys/class/backlight. */

@@ -106,6 +106,25 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
   - Zdjęcia są o każdej porze. Nocny wygląd z samym przyciemnionym zegarem na czarnym tle usunęliśmy 22.11.2026 na życzenie użytkownika. W nocy ekran może ściemnić podświetlenie (D6).
   - Strony pod zasłoniętym wygaszaczem nie są rysowane.
 - **Pulpit zdjęć.** Stuknięcie w lewą lub prawą trzecią część ekranu cofa albo przechodzi dalej, jak w aplikacji Zdjęcia; strzałka mignie przy dotknięciu. Ręczna zmiana zaczyna od nowa odliczanie do następnego zdjęcia. Przesunięcie palcem dalej zmienia pulpit.
+- **Pogoda (od 23.11.2026).**
+  - Duża karta: na górze bieżąca pogoda, pod nią wykres na 24 h.
+    - Krzywa temperatury zaczyna się od „Teraz”. Wartości i ikony są co 3 h.
+    - Słupki szansy opadów; z ilością w mm, gdy pada.
+    - Noc widać w kolorze krzywej: pomarańczowa w dzień, lawendowa w nocy, jak ikony księżyca. Szare pasy nocy z pierwszej wersji wyglądały jak puste prostokąty, więc wypadły.
+  - Pod wykresem pięć kafelków jak w Apple Weather:
+    - UV z porą szczytu;
+    - wiatr z porywami i kierunkiem;
+    - ciśnienie z kierunkiem zmiany w ciągu 3 h;
+    - wschód i zachód z długością dnia;
+    - suma opadów.
+  - Z prawej, spokojniej: 7 dni.
+- **Muzyka (od 23.11.2026).**
+  - Z lewej: co gra, sterowanie, głośnik i głośność. Stuknięcie w głośnik otwiera wybór urządzenia Spotify.
+  - Suwak głośności jest tylko dla urządzeń z `supports_volume`. Telefony go nie mają i Spotify odpowiada tam 403.
+  - Z prawej: biblioteka 4×2 ze stronami.
+    - Zakładka „Playlisty” zaczyna się od Polubionych utworów, dalej idą playlisty.
+    - Zakładka „Ostatnio grane” to albumy z ostatnio granych utworów.
+  - Stuknięcie w okładkę gra ją. Gdy nic nie jest aktywne, najpierw trzeba wybrać, gdzie grać.
 - **Zegar.** Wysoki i cienki krój do wyboru na ekranie przez `?fonts`. Kandydaci są w `clockFont.svelte.ts`, a po wyborze zbędne paczki znikną.
 - **Światła.** Na razie to makieta.
   - Lampka lewa i prawa: tylko włącz/wyłącz.
@@ -187,6 +206,11 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
   - Odczyt `GET /v1/me/player`: co 5 s, gdy coś gra (i zaraz po spodziewanym końcu utworu), co 20 s w przeciwnym razie. Szanuje `Retry-After` przy 429.
   - `music` wychodzi tylko wtedy, gdy zmienia się utwór, stan, urządzenie albo pozycja odbiega o ponad 2,5 s. Pasek postępu strona przesuwa sama, więc częste aktualizacje tylko by go restartowały.
   - Sterowanie: `PUT /me/player/play|pause`, `POST /me/player/next|previous`. Bez aktywnego urządzenia serwer odpowiada 409, a bez logowania 503.
+  - Biblioteka (`musicLibrary`, co 30 min): `/me/playlists`, albumy z `/me/player/recently-played` bez powtórzeń i Polubione jako `spotify:user:<id>:collection`. Do tego urządzenia (`/me/player/devices`), przeniesienie odtwarzania, głośność i odtwarzanie kontekstu na wskazanym urządzeniu.
+  - Biblioteka potrzebuje uprawnień `playlist-read-private`, `playlist-read-collaborative` i `user-read-recently-played`.
+    - Skrypt logowania prosi o nie od 23.11.2026.
+    - Starsze logowanie dalej gra, tylko bez biblioteki; serwer prosi wtedy w logu o ponowne zalogowanie.
+    - Serwer zauważa zmianę pliku `spotify.json` (czas modyfikacji). Nowe logowanie działa więc bez restartu i od razu wczytuje bibliotekę.
   - Sterowanie wymaga Spotify Premium.
 
 - **Drukarka (D4b).** X2D, firmware 01.02.00.00. Sprawdzone 23.11.2026:
@@ -226,10 +250,14 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
 
 | Ścieżka | Opis |
 |---|---|
-| `GET /api/state` | Pełny stan: `weather`, `calendars`, `events`, `music`, `lights`, `printer`, `photos`, `display`. Każde pole może być `null`, gdy dostawca jeszcze nie ma danych albo nie jest skonfigurowany. |
+| `GET /api/state` | Pełny stan: `weather`, `calendars`, `events`, `music`, `musicLibrary`, `lights`, `printer`, `photos`, `display`. Każde pole może być `null`, gdy dostawca jeszcze nie ma danych albo nie jest skonfigurowany. |
 | `GET /api/health` | `{ "ok": true, "uptimeS": … }`, dla health checku |
 | `GET /api/events` | SSE, zdarzenie `update` z `{ "topic": "weather" \| "calendars" \| "events" \| "music" \| "lights" \| "printer" \| "photos" \| "display", "data": … }` |
 | `POST /api/music/{play,pause,next,previous}` | Sterowanie Spotify: 204, 409 bez aktywnego urządzenia, 503 bez logowania |
+| `GET /api/music/devices` | Urządzenia Spotify: `[{ id, name, type, isActive, volume }]` |
+| `POST /api/music/context` | `{ "uri": "spotify:…", "deviceId"?: "…" }`: gra playlistę, album albo Polubione |
+| `POST /api/music/device` | `{ "id": "…" }`: przenosi odtwarzanie na urządzenie |
+| `POST /api/music/volume` | `{ "percent": 0–100 }`: głośność aktywnego urządzenia |
 | `GET /api/photos/{id}.jpg` | podgląd zdjęcia z Immicha, z pamięci podręcznej serwera |
 | `POST /api/lights/{id}` | `{ "on": bool }`, dla RGBW też `"brightness": 0–100`, `"color": "#rrggbb"`, `"white": 0–100`; na razie makieta |
 | `POST /api/display` | `{ "brightness": 0–100 }`, czyli podświetlenie ekranu |

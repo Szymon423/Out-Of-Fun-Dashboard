@@ -12,7 +12,7 @@ json track_player(bool playing = true, int progress = 61000) {
       {"is_playing", playing},
       {"progress_ms", progress},
       {"currently_playing_type", "track"},
-      {"device", {{"name", "Głośnik w salonie"}, {"type", "Speaker"}}},
+      {"device", {{"name", "Głośnik w salonie"}, {"type", "Speaker"}, {"volume_percent", 45}}},
       {"item",
        {{"type", "track"},
         {"name", "Midnight City"},
@@ -40,7 +40,8 @@ int main() {
   CHECK(m["readAt"] == 1'000'000);
   CHECK(m["durationMs"] == 243000);
   CHECK(m["device"] == "Głośnik w salonie");
-  CHECK(m.size() == 9); // the NowPlaying of types.ts
+  CHECK(m["volume"] == 45);
+  CHECK(m.size() == 10); // the NowPlaying of types.ts
 
   // Covers: the largest up to 640 px, else the smallest given; none at all is null.
   json big = track_player();
@@ -87,5 +88,38 @@ int main() {
   // Paused: the position must stay where it was.
   const json paused = dash::now_playing(track_player(false, 61000), 1'000'000);
   CHECK(!dash::worth_publishing(paused, dash::now_playing(track_player(false, 61000), 1'020'000)));
+  json louder = track_player();
+  louder["device"]["volume_percent"] = 70;
+  CHECK(dash::worth_publishing(shown, dash::now_playing(louder, 1'005'000))); // volume changed elsewhere
+  json phone = track_player();
+  phone["device"]["supports_volume"] = false; // phones: the API may not set the volume
+  CHECK(dash::now_playing(phone, 0)["volume"].is_null());
+
+  // The library: playlists as they come, recent albums once each (at most 8), liked songs.
+  const json playlists = {{"items",
+                           {{{"name", "Do pracy"},
+                             {"uri", "spotify:playlist:a"},
+                             {"images", {{{"url", "https://i.scdn.co/p1"}, {"width", 640}}}},
+                             {"tracks", {{"total", 22}}}},
+                            {{"name", "Jedna"}, {"uri", "spotify:playlist:b"}, {"images", nullptr}, {"tracks", {{"total", 1}}}},
+                            {{"name", "Bez URI"}}}}};
+  json recent = {{"items", json::array()}};
+  for (int i = 0; i < 12; ++i) {
+    recent["items"].push_back({{"track",
+                                {{"album",
+                                  {{"name", "Album " + std::to_string(i % 10)},
+                                   {"uri", "spotify:album:" + std::to_string(i % 10)},
+                                   {"images", {{{"url", "https://i.scdn.co/a"}, {"width", 300}}}},
+                                   {"artists", {{{"name", "M83"}}}}}}}}});
+  }
+  const json lib = dash::music_library(playlists, recent, "user1");
+  CHECK(lib["playlists"].size() == 2);
+  CHECK(lib["playlists"][0] ==
+        json({{"name", "Do pracy"}, {"uri", "spotify:playlist:a"}, {"imageUrl", "https://i.scdn.co/p1"}, {"detail", "22 utwory"}}));
+  CHECK(lib["playlists"][1]["imageUrl"].is_null() && lib["playlists"][1]["detail"] == "1 utwór");
+  CHECK(lib["recent"].size() == 8);
+  CHECK(lib["recent"][0]["detail"] == "M83" && lib["recent"][0]["uri"] == "spotify:album:0");
+  CHECK(lib["likedUri"] == "spotify:user:user1:collection");
+  CHECK(dash::music_library(json::object(), json::object(), "")["likedUri"].is_null());
   return 0;
 }

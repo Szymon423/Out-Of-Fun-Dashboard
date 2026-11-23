@@ -124,3 +124,12 @@ button {
   box-shadow: none !important;
   text-shadow: none !important;
 }
+
+/* Colour of a weather icon by its kind (format.ts weatherLook().tone). */
+.tone-sun { --tone: var(--tone-sun); }
+.tone-night { --tone: var(--tone-night); }
+.tone-cloud { --tone: var(--tone-cloud); }
+.tone-rain { --tone: var(--tone-rain); }
+.tone-snow { --tone: var(--tone-snow); }
+.tone-storm { --tone: var(--tone-storm); }
+.tone-fog { --tone: var(--tone-fog); }
