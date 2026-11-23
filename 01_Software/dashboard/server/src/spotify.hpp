@@ -47,6 +47,14 @@ bool worth_publishing(const nlohmann::json &shown, const nlohmann::json &next);
  */
 nlohmann::json music_library(const nlohmann::json &playlists, const nlohmann::json &recent, const std::string &user_id);
 
+/**
+ * The tracks of a playlist, an album or the liked songs as [{name, artist, uri, durationMs}],
+ * from the items of GET /playlists/{id}/tracks, /albums/{id}/tracks or /me/tracks (playlist
+ * and liked-songs items wrap each track in {"track": ...}; album items are tracks). Local
+ * files and removed tracks, which cannot be played through the API, are left out.
+ */
+nlohmann::json track_list(const nlohmann::json &items);
+
 class Spotify {
 public:
   Spotify(Hub &hub, std::string client_id, std::filesystem::path token_file);
@@ -58,8 +66,13 @@ public:
   Result command(std::string_view action);
 
   /** Plays a playlist, an album or the liked songs (a spotify: URI), on the given device or,
-   *  without one, on the active device. */
-  Result play_context(const std::string &uri, const std::string &device_id = {});
+   *  without one, on the active device; from the track `offset_uri` when given, so the rest
+   *  of the playlist follows it. */
+  Result play_context(const std::string &uri, const std::string &device_id = {}, const std::string &offset_uri = {});
+
+  /** The tracks of a spotify:playlist:, spotify:album: or ...:collection URI, at most 100;
+   *  null when it cannot be read (no login, a missing scope, an editorial playlist). */
+  nlohmann::json tracks(const std::string &uri);
 
   /** Moves the playback to another device, keeping it playing. */
   Result transfer(const std::string &device_id);

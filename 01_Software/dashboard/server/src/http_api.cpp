@@ -164,6 +164,15 @@ HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spot
     send_json(res, 200, devices);
   });
 
+  server.Get("/api/music/tracks", [spotify](const httplib::Request &req, httplib::Response &res) {
+    const std::string uri = req.get_param_value("uri");
+    if (!uri.starts_with("spotify:")) return send_error(res, 400, "expected ?uri=spotify:...");
+    if (!spotify) return send_error(res, 503, "Spotify is not configured");
+    const json tracks = spotify->tracks(uri);
+    if (tracks.is_null()) return send_error(res, 502, "Spotify did not give the tracks");
+    send_json(res, 200, tracks);
+  });
+
   server.Post("/api/music/context", [spotify, spotify_result, body_field](const httplib::Request &req,
                                                                         httplib::Response &res) {
     const json uri = body_field(req, "uri");
@@ -172,7 +181,9 @@ HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spot
     }
     if (!spotify) return send_error(res, 503, "Spotify is not configured");
     const json device = body_field(req, "deviceId");
-    spotify_result(res, spotify->play_context(uri.get<std::string>(), device.is_string() ? device.get<std::string>() : ""));
+    const json offset = body_field(req, "offset");
+    spotify_result(res, spotify->play_context(uri.get<std::string>(), device.is_string() ? device.get<std::string>() : "",
+                                              offset.is_string() ? offset.get<std::string>() : ""));
   });
 
   server.Post("/api/music/device", [spotify, spotify_result, body_field](const httplib::Request &req,

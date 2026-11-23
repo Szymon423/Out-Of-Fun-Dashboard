@@ -173,6 +173,7 @@ export function mockState(): DashboardState {
     events: events(),
     music: {
       title: 'Midnight City',
+      uri: 'spotify:playlist:mock0:t1',
       artist: 'M83',
       album: "Hurry Up, We're Dreaming",
       artUrl: null,

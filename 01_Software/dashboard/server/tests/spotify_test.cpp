@@ -41,7 +41,7 @@ int main() {
   CHECK(m["durationMs"] == 243000);
   CHECK(m["device"] == "Głośnik w salonie");
   CHECK(m["volume"] == 45);
-  CHECK(m.size() == 10); // the NowPlaying of types.ts
+  CHECK(m.size() == 11); // the NowPlaying of types.ts
 
   // Covers: the largest up to 640 px, else the smallest given; none at all is null.
   json big = track_player();
@@ -102,7 +102,8 @@ int main() {
                              {"images", {{{"url", "https://i.scdn.co/p1"}, {"width", 640}}}},
                              {"tracks", {{"total", 22}}}},
                             {{"name", "Jedna"}, {"uri", "spotify:playlist:b"}, {"images", nullptr}, {"tracks", {{"total", 1}}}},
-                            {{"name", "Bez URI"}}}}};
+                            {{"name", "Bez URI"}},
+                            {{"name", "Nowe API"}, {"uri", "spotify:playlist:c"}, {"items", {{"total", 5}}}}}}};
   json recent = {{"items", json::array()}};
   for (int i = 0; i < 12; ++i) {
     recent["items"].push_back({{"track",
@@ -113,7 +114,8 @@ int main() {
                                    {"artists", {{{"name", "M83"}}}}}}}}});
   }
   const json lib = dash::music_library(playlists, recent, "user1");
-  CHECK(lib["playlists"].size() == 2);
+  CHECK(lib["playlists"].size() == 3);
+  CHECK(lib["playlists"][2]["detail"] == "5 utworów");
   CHECK(lib["playlists"][0] ==
         json({{"name", "Do pracy"}, {"uri", "spotify:playlist:a"}, {"imageUrl", "https://i.scdn.co/p1"}, {"detail", "22 utwory"}}));
   CHECK(lib["playlists"][1]["imageUrl"].is_null() && lib["playlists"][1]["detail"] == "1 utwór");
@@ -121,5 +123,23 @@ int main() {
   CHECK(lib["recent"][0]["detail"] == "M83" && lib["recent"][0]["uri"] == "spotify:album:0");
   CHECK(lib["likedUri"] == "spotify:user:user1:collection");
   CHECK(dash::music_library(json::object(), json::object(), "")["likedUri"].is_null());
+
+  // Track lists: playlist items wrap the track, album items are tracks; local files drop out.
+  const json playlist_items = {
+      {{"track", {{"name", "Midnight City"}, {"uri", "spotify:track:1"}, {"duration_ms", 243000},
+                  {"artists", {{{"name", "M83"}}}}}}},
+      {{"track", {{"name", "Mój plik"}, {"uri", "spotify:local:x"}, {"is_local", true}}}},
+      {{"track", nullptr}}, // a removed track
+  };
+  const json pl = dash::track_list(playlist_items);
+  CHECK(pl.size() == 1);
+  CHECK(pl[0] == json({{"name", "Midnight City"}, {"artist", "M83"}, {"uri", "spotify:track:1"}, {"durationMs", 243000}}));
+  const json album_items = {{{"name", "Intro"}, {"uri", "spotify:track:2"}, {"duration_ms", 5000},
+                             {"artists", {{{"name", "A"}}, {{"name", "B"}}}}}};
+  CHECK(dash::track_list(album_items)[0]["artist"] == "A, B");
+  const json new_playlist_items = {{{"added_at", "2026-01-01T00:00:00Z"},
+                                    {"item", {{"name", "Wait"}, {"uri", "spotify:track:3"}, {"duration_ms", 343000},
+                                              {"type", "track"}, {"artists", {{{"name", "M83"}}}}}}}};
+  CHECK(dash::track_list(new_playlist_items)[0]["name"] == "Wait");
   return 0;
 }

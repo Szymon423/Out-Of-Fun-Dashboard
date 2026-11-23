@@ -78,6 +78,7 @@ json now_playing(const json &player, std::int64_t now) {
 
   return {
       {"title", text(*item, "name")},
+      {"uri", text(*item, "uri")},
       {"artist", artist},
       {"album", album},
       {"artUrl", cover(images)},
@@ -109,7 +110,8 @@ json music_library(const json &playlists, const json &recent, const std::string 
   json lists = json::array();
   for (const json &p : playlists.value("items", json::array())) {
     if (!p.is_object() || text(p, "uri").empty()) continue;
-    const json tracks = p.value("tracks", json::object());
+    // The count is under "items" in newer answers, under "tracks" in older ones.
+    const json tracks = p.contains("items") && p["items"].is_object() ? p["items"] : p.value("tracks", json::object());
     lists.push_back({{"name", text(p, "name")},
                      {"uri", text(p, "uri")},
                      {"imageUrl", cover(p.value("images", json::array()))},
@@ -134,6 +136,26 @@ json music_library(const json &playlists, const json &recent, const std::string 
   return {{"playlists", lists},
           {"recent", albums},
           {"likedUri", user_id.empty() ? json(nullptr) : json("spotify:user:" + user_id + ":collection")}};
+}
+
+json track_list(const json &items) {
+  json out = json::array();
+  for (const json &item : items) {
+    // Playlist items (/playlists/{id}/items) wrap the track in "item", older answers and the
+    // liked songs in "track"; album tracks come bare.
+    const json &track = item.contains("item") ? item["item"] : item.contains("track") ? item["track"] : item;
+    if (!track.is_object() || track.value("is_local", false) || text(track, "uri").empty()) continue;
+    std::string artist;
+    for (const json &a : track.value("artists", json::array())) {
+      if (!artist.empty()) artist += ", ";
+      artist += text(a, "name");
+    }
+    out.push_back({{"name", text(track, "name")},
+                   {"artist", artist},
+                   {"uri", text(track, "uri")},
+                   {"durationMs", integer(track, "duration_ms")}});
+  }
+  return out;
 }
 
 bool worth_publishing(const json &shown, const json &next) {
@@ -285,9 +307,36 @@ Spotify::Result Spotify::command(std::string_view action) {
   return Result::failed;
 }
 
-Spotify::Result Spotify::play_context(const std::string &uri, const std::string &device_id) {
+Spotify::Result Spotify::play_context(const std::string &uri, const std::string &device_id,
+                                      const std::string &offset_uri) {
   const std::string path = device_id.empty() ? "/me/player/play" : "/me/player/play?device_id=" + url_encode(device_id);
-  return act("play " + uri, "PUT", path, json{{"context_uri", uri}}.dump());
+  json body = {{"context_uri", uri}};
+  if (!offset_uri.empty()) body["offset"] = {{"uri", offset_uri}};
+  return act("play " + uri, "PUT", path, body.dump());
+}
+
+json Spotify::tracks(const std::string &uri) {
+  // spotify:playlist:<id>, spotify:album:<id>, spotify:user:<user>:collection
+  const auto colon = uri.rfind(':');
+  const std::string id = uri.substr(colon + 1);
+  std::string path;
+  if (uri.starts_with("spotify:playlist:")) {
+    path = "/playlists/" + url_encode(id) + "/items?limit=100";
+  } else if (uri.starts_with("spotify:album:")) {
+    path = "/albums/" + url_encode(id) + "/tracks?limit=50";
+  } else if (uri.ends_with(":collection")) {
+    path = "/me/tracks?limit=50";
+  } else {
+    return nullptr;
+  }
+  try {
+    return track_list(json::parse(api("GET", path).body).value("items", json::array()));
+  } catch (const NotSignedIn &) {
+    return nullptr;
+  } catch (const std::exception &e) {
+    log_warning("spotify: reading the tracks of {} failed: {}", uri, e.what());
+    return nullptr;
+  }
 }
 
 Spotify::Result Spotify::transfer(const std::string &device_id) {

@@ -15,6 +15,7 @@ import type {
   Photos,
   Printer,
   SpotifyDevice,
+  Track,
   Update,
 } from './types';
 
@@ -139,9 +140,25 @@ export function music(action: 'play' | 'pause' | 'next' | 'previous'): void {
   void post(`/api/music/${action}`);
 }
 
-/** Plays a playlist or album; on `deviceId` when nothing is active yet. */
-export function playContext(uri: string, deviceId?: string): void {
-  void post('/api/music/context', deviceId ? { uri, deviceId } : { uri });
+/** Plays a playlist or album, from the track `offset` when given (the rest of the list
+ *  follows); on `deviceId` when nothing is active yet. */
+export function playContext(uri: string, deviceId?: string, offset?: string): void {
+  void post('/api/music/context', { uri, ...(deviceId ? { deviceId } : {}), ...(offset ? { offset } : {}) });
+}
+
+/** The tracks of a playlist, album or the liked songs; null when Spotify does not give them. */
+export async function fetchTracks(uri: string): Promise<Track[] | null> {
+  if (connection.mode === 'mock') {
+    const names = ['Intro', 'Wait', 'Reunion', 'Splendor', 'Claudia Lewis', 'This Bright Flash', 'Soon, My Friend',
+      'Steve McQueen', 'Echoes of Mine', 'Ok Pal', 'Klaus I Love You', 'New Map', 'My Tears Are Becoming a Sea'];
+    return names.map((name, i) => ({ name, artist: 'M83', uri: `${uri}:t${i}`, durationMs: 180_000 + i * 13_000 }));
+  }
+  try {
+    const res = await fetch(`/api/music/tracks?uri=${encodeURIComponent(uri)}`);
+    return res.ok ? ((await res.json()) as Track[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Moves the playback to another Spotify device. */

@@ -1,10 +1,12 @@
 <!--
   Music. Left: what plays, with the controls, the device it plays on (a tap opens the device
   picker) and its volume. Right: the library, as covers four by two, paged: the liked songs and
-  the playlists, or the albums played lately. A tap on a cover plays it; when nothing is active
-  yet, the picker asks where to play first.
+  the playlists, or the albums played lately. A tap on a cover opens its tracks; a tap on a
+  track plays the list from that track on (the rest follows), "Odtwórz" plays it from the top.
+  When nothing is active yet, the picker asks where to play first.
 -->
 <script lang="ts">
+  import AudioLines from '@lucide/svelte/icons/audio-lines';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -26,8 +28,9 @@
   import Slider from '../components/Slider.svelte';
   import TrackProgress from '../components/TrackProgress.svelte';
   import { nav, PAGES } from '../nav.svelte';
-  import { dash, fetchDevices, music, playContext, setVolume, transferTo } from '../state.svelte';
-  import type { LibraryItem, SpotifyDevice } from '../types';
+  import { duration } from '../format';
+  import { dash, fetchDevices, fetchTracks, music, playContext, setVolume, transferTo } from '../state.svelte';
+  import type { LibraryItem, SpotifyDevice, Track } from '../types';
 
   const PAGE = 8;
   const m = $derived(dash.music);
@@ -52,6 +55,29 @@
   function switchTab(value: 'playlists' | 'recent'): void {
     tab = value;
     page = 0;
+    open = null;
+  }
+
+  // An opened playlist or album: its tracks, seven to a page.
+  const ROWS = 7;
+  let open = $state<LibraryItem | null>(null);
+  let list = $state<Track[] | null | 'error'>(null); // null while loading
+  let listPage = $state(0);
+  const listPages = $derived(Array.isArray(list) ? Math.max(1, Math.ceil(list.length / ROWS)) : 1);
+
+  // ?openList opens the first playlist at start, for checking the track list.
+  if (new URLSearchParams(location.search).has('openList')) {
+    $effect(() => {
+      if (!open && lib?.playlists.length) void openItem(lib.playlists[0]);
+    });
+  }
+
+  async function openItem(item: LibraryItem): Promise<void> {
+    open = item;
+    list = null;
+    listPage = 0;
+    const tracks = await fetchTracks(item.uri);
+    if (open === item) list = tracks ?? 'error';
   }
 
   /** A soft two-colour gradient from the name, for covers Spotify does not have. */
@@ -61,24 +87,26 @@
     return `linear-gradient(135deg, hsl(${h} 62% 52%), hsl(${(h + 48) % 360} 70% 38%))`;
   }
 
-  // The device picker: to move the music elsewhere, or to choose where a cover should play.
-  let picker = $state<{ devices: SpotifyDevice[] | null; play: string | null } | null>(null);
+  // The device picker: to move the music elsewhere, or to choose where a list should play.
+  type Pending = { uri: string; offset?: string };
+  let picker = $state<{ devices: SpotifyDevice[] | null; play: Pending | null } | null>(null);
 
-  async function openPicker(play: string | null = null): Promise<void> {
+  async function openPicker(play: Pending | null = null): Promise<void> {
     picker = { devices: null, play };
     const devices = await fetchDevices();
     if (picker) picker.devices = devices;
   }
 
   function choose(device: SpotifyDevice): void {
-    if (picker?.play) playContext(picker.play, device.id);
+    if (picker?.play) playContext(picker.play.uri, device.id, picker.play.offset);
     else if (!device.isActive) transferTo(device.id);
     picker = null;
   }
 
-  function play(item: LibraryItem): void {
-    if (m) playContext(item.uri);
-    else void openPicker(item.uri); // nothing active: ask where
+  /** Plays the list, from `track` when given; nothing active yet: ask where first. */
+  function playFrom(item: LibraryItem, track?: Track): void {
+    if (m) playContext(item.uri, undefined, track?.uri);
+    else void openPicker({ uri: item.uri, offset: track?.uri });
   }
 
   const ICON: Record<string, Component> = { Computer: Laptop, Smartphone, TV: Tv, Speaker };
@@ -125,43 +153,91 @@
     </section>
 
     <section class="library card">
-      <header>
-        <Segmented options={TABS} value={tab} onchange={switchTab} />
-        {#if pages > 1}
-          <div class="pager num">
-            <button aria-label="Poprzednia strona" disabled={page === 0} onclick={() => (page = Math.max(0, page - 1))}>
-              <ChevronLeft size={22} />
-            </button>
-            <span>{page + 1} / {pages}</span>
-            <button aria-label="Następna strona" disabled={page >= pages - 1} onclick={() => (page = Math.min(pages - 1, page + 1))}>
-              <ChevronRight size={22} />
-            </button>
+      {#snippet pager(current: number, total: number, set: (p: number) => void)}
+        <div class="pager num">
+          <button aria-label="Poprzednia strona" disabled={current === 0} onclick={() => set(Math.max(0, current - 1))}>
+            <ChevronLeft size={22} />
+          </button>
+          <span>{current + 1} / {total}</span>
+          <button aria-label="Następna strona" disabled={current >= total - 1} onclick={() => set(Math.min(total - 1, current + 1))}>
+            <ChevronRight size={22} />
+          </button>
+        </div>
+      {/snippet}
+      {#snippet coverOf(item: LibraryItem, iconSize: number)}
+        <span class="cover" style:background={item.imageUrl ? undefined : placeholder(item.name)}>
+          {#if item.imageUrl}
+            <img src={item.imageUrl} alt="" />
+          {:else if item.uri === lib?.likedUri}
+            <Heart size={iconSize} fill="currentColor" strokeWidth={0} />
+          {:else}
+            <Music size={iconSize * 0.8} strokeWidth={1.6} />
+          {/if}
+        </span>
+      {/snippet}
+
+      {#if open}
+        <header>
+          <button class="back" onclick={() => (open = null)}>
+            <ChevronLeft size={22} />
+            {tab === 'recent' ? 'Ostatnio grane' : 'Playlisty'}
+          </button>
+          {#if listPages > 1}{@render pager(listPage, listPages, (p) => (listPage = p))}{/if}
+        </header>
+        <div class="hero">
+          <span class="hero-cover">{@render coverOf(open, 34)}</span>
+          <div class="hero-text">
+            <b>{open.name}</b>
+            <span>{open.detail}</span>
+          </div>
+          <button class="play-all" onclick={() => open && playFrom(open)}>
+            <Play size={17} fill="currentColor" strokeWidth={0} /> Odtwórz
+          </button>
+        </div>
+        {#if list === null}
+          <p class="note">Wczytuję utwory…</p>
+        {:else if list === 'error'}
+          <p class="note">
+            {open.uri.endsWith(':collection')
+              ? 'Lista polubionych wymaga ponownego zalogowania Spotify (tools/spotify-login.py).'
+              : 'Spotify nie podał listy utworów (np. playlisty tworzone przez Spotify).'}
+            Całość możesz zagrać przyciskiem „Odtwórz”.
+          </p>
+        {:else}
+          <div class="tracks">
+            {#each list.slice(listPage * ROWS, listPage * ROWS + ROWS) as t, i (t.uri)}
+              {@const current = m?.uri === t.uri}
+              <button class="track" class:current onclick={() => open && playFrom(open, t)}>
+                <span class="no num">
+                  {#if current}<AudioLines size={18} />{:else}{listPage * ROWS + i + 1}{/if}
+                </span>
+                <span class="tt"><b>{t.name}</b><small>{t.artist}</small></span>
+                <span class="len num">{duration(t.durationMs)}</span>
+              </button>
+            {/each}
           </div>
         {/if}
-      </header>
-
-      {#if !lib}
-        <p class="note">Playlisty pojawią się po zalogowaniu Spotify z nowymi uprawnieniami.</p>
-      {:else if shown.length === 0}
-        <p class="note">Nic tu jeszcze nie ma.</p>
       {:else}
-        <div class="grid">
-          {#each shown as item (item.uri)}
-            <button class="item" onclick={() => play(item)}>
-              <span class="cover" style:background={item.imageUrl ? undefined : placeholder(item.name)}>
-                {#if item.imageUrl}
-                  <img src={item.imageUrl} alt="" />
-                {:else if item.uri === lib.likedUri}
-                  <Heart size={44} fill="currentColor" strokeWidth={0} />
-                {:else}
-                  <Music size={36} strokeWidth={1.6} />
-                {/if}
-              </span>
-              <span class="name">{item.name}</span>
-              <span class="detail">{item.detail}</span>
-            </button>
-          {/each}
-        </div>
+        <header>
+          <Segmented options={TABS} value={tab} onchange={switchTab} />
+          {#if pages > 1}{@render pager(page, pages, (p) => (page = p))}{/if}
+        </header>
+
+        {#if !lib}
+          <p class="note">Playlisty pojawią się po zalogowaniu Spotify z nowymi uprawnieniami.</p>
+        {:else if shown.length === 0}
+          <p class="note">Nic tu jeszcze nie ma.</p>
+        {:else}
+          <div class="grid">
+            {#each shown as item (item.uri)}
+              <button class="item" onclick={() => openItem(item)}>
+                {@render coverOf(item, 44)}
+                <span class="name">{item.name}</span>
+                <span class="detail">{item.detail}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
       {/if}
     </section>
   </div>
@@ -420,6 +496,131 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .back {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 40px;
+    padding: 0 14px 0 6px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 600;
+    background: var(--fill);
+  }
+
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 14px;
+  }
+
+  .hero-cover {
+    width: 84px;
+    flex: none;
+  }
+
+  .hero-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .hero-text b {
+    font-size: 22px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hero-text span {
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .play-all {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 20px;
+    border-radius: 999px;
+    font-size: 16px;
+    font-weight: 650;
+    color: #fff;
+    background: var(--good);
+  }
+
+  .tracks {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    margin-top: 12px;
+    min-height: 0;
+  }
+
+  .track {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 54px;
+    padding: 0 10px;
+    border-radius: 12px;
+    text-align: left;
+  }
+
+  .track:active {
+    background: var(--fill);
+  }
+
+  .track.current {
+    color: var(--good);
+  }
+
+  .no {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    flex: none;
+    font-size: 14px;
+    color: var(--faint);
+  }
+
+  .track.current .no {
+    color: var(--good);
+  }
+
+  .tt {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .tt b {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tt small {
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .len {
+    flex: none;
+    font-size: 14px;
+    color: var(--muted);
   }
 
   .note {

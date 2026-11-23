@@ -72,6 +72,7 @@ export interface CalendarEvent {
 
 export interface NowPlaying {
   title: string;
+  uri: string; // spotify:track:..., to mark the track in a list
   artist: string;
   album: string;
   artUrl: string | null;
@@ -96,6 +97,14 @@ export interface MusicLibrary {
   playlists: LibraryItem[];
   recent: LibraryItem[]; // albums played lately
   likedUri: string | null;
+}
+
+/** A track of a playlist or album, from GET /api/music/tracks. */
+export interface Track {
+  name: string;
+  artist: string;
+  uri: string;
+  durationMs: number;
 }
 
 /** A Spotify Connect device, from GET /api/music/devices. */

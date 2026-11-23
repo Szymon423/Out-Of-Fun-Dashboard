@@ -124,7 +124,10 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
   - Z prawej: biblioteka 4×2 ze stronami.
     - Zakładka „Playlisty” zaczyna się od Polubionych utworów, dalej idą playlisty.
     - Zakładka „Ostatnio grane” to albumy z ostatnio granych utworów.
-  - Stuknięcie w okładkę gra ją. Gdy nic nie jest aktywne, najpierw trzeba wybrać, gdzie grać.
+  - Stuknięcie w okładkę otwiera listę utworów, 7 na stronę.
+    - Stuknięcie w utwór gra listę od tego utworu, a dalej leci reszta (`context_uri` z `offset`).
+    - „Odtwórz” gra całość od początku. Grający utwór jest wyróżniony na zielono.
+    - Gdy nic nie jest aktywne, najpierw trzeba wybrać, gdzie grać.
 - **Zegar.** Wysoki i cienki krój do wyboru na ekranie przez `?fonts`. Kandydaci są w `clockFont.svelte.ts`, a po wyborze zbędne paczki znikną.
 - **Światła.** Na razie to makieta.
   - Lampka lewa i prawa: tylko włącz/wyłącz.
@@ -160,6 +163,7 @@ Parametry adresu do testów:
 | `?calendar=day` / `week` / `month` | tryb kalendarza |
 | `?event=next` | od razu karta najbliższego wydarzenia (z opisem, jeśli jest) |
 | `?printer=idle` / `finished` / `offline` / `error` | stan drukarki w danych testowych |
+| `?openList` | od razu lista utworów pierwszej playlisty na pulpicie muzyki |
 | `?fonts` | wybór kroju zegara |
 | `?bench` (`&rounds=2`, `&still`, `&flat`) | pomiar płynności przejść, wyniki w journalu (README) |
 
@@ -207,7 +211,11 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
   - `music` wychodzi tylko wtedy, gdy zmienia się utwór, stan, urządzenie albo pozycja odbiega o ponad 2,5 s. Pasek postępu strona przesuwa sama, więc częste aktualizacje tylko by go restartowały.
   - Sterowanie: `PUT /me/player/play|pause`, `POST /me/player/next|previous`. Bez aktywnego urządzenia serwer odpowiada 409, a bez logowania 503.
   - Biblioteka (`musicLibrary`, co 30 min): `/me/playlists`, albumy z `/me/player/recently-played` bez powtórzeń i Polubione jako `spotify:user:<id>:collection`. Do tego urządzenia (`/me/player/devices`), przeniesienie odtwarzania, głośność i odtwarzanie kontekstu na wskazanym urządzeniu.
-  - Biblioteka potrzebuje uprawnień `playlist-read-private`, `playlist-read-collaborative` i `user-read-recently-played`.
+  - Listy utworów: `/playlists/{id}/items`, `/albums/{id}/tracks` i `/me/tracks` (Polubione, uprawnienie `user-library-read`).
+    - Zmiana API Spotify z 2026 r.: dla aplikacji w trybie deweloperskim stare `/playlists/{id}/tracks` daje 403 „Forbidden”.
+    - W nowym formacie utwór jest w polu `item` zamiast `track`, a liczba utworów playlisty w `items.total` zamiast `tracks.total`.
+    - Serwer czyta oba warianty.
+  - Biblioteka potrzebuje uprawnień `playlist-read-private`, `playlist-read-collaborative`, `user-read-recently-played` i `user-library-read`.
     - Skrypt logowania prosi o nie od 23.11.2026.
     - Starsze logowanie dalej gra, tylko bez biblioteki; serwer prosi wtedy w logu o ponowne zalogowanie.
     - Serwer zauważa zmianę pliku `spotify.json` (czas modyfikacji). Nowe logowanie działa więc bez restartu i od razu wczytuje bibliotekę.
@@ -255,7 +263,8 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
 | `GET /api/events` | SSE, zdarzenie `update` z `{ "topic": "weather" \| "calendars" \| "events" \| "music" \| "lights" \| "printer" \| "photos" \| "display", "data": … }` |
 | `POST /api/music/{play,pause,next,previous}` | Sterowanie Spotify: 204, 409 bez aktywnego urządzenia, 503 bez logowania |
 | `GET /api/music/devices` | Urządzenia Spotify: `[{ id, name, type, isActive, volume }]` |
-| `POST /api/music/context` | `{ "uri": "spotify:…", "deviceId"?: "…" }`: gra playlistę, album albo Polubione |
+| `GET /api/music/tracks?uri=spotify:…` | Utwory playlisty, albumu albo Polubionych: `[{ name, artist, uri, durationMs }]`, do 100 |
+| `POST /api/music/context` | `{ "uri": "spotify:…", "deviceId"?: "…", "offset"?: "spotify:track:…" }`: gra playlistę, album albo Polubione, od utworu `offset` |
 | `POST /api/music/device` | `{ "id": "…" }`: przenosi odtwarzanie na urządzenie |
 | `POST /api/music/volume` | `{ "percent": 0–100 }`: głośność aktywnego urządzenia |
 | `GET /api/photos/{id}.jpg` | podgląd zdjęcia z Immicha, z pamięci podręcznej serwera |
