@@ -25,6 +25,7 @@ core = static_library(
   'src/display.cpp',
   'src/fetch.cpp',
   'src/hub.cpp',
+  'src/immich.cpp',
   'src/lights.cpp',
   'src/log.cpp',
   'src/weather.cpp',
@@ -50,6 +51,10 @@ test(
   'weather',
   executable('weather-test', 'tests/weather_test.cpp', dependencies: core_dep, build_by_default: false),
   args: [files('tests/open-meteo.json')],
+)
+test(
+  'immich',
+  executable('immich-test', 'tests/immich_test.cpp', dependencies: core_dep, build_by_default: false),
 )
 test(
   'hub',

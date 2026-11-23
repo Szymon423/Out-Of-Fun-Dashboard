@@ -114,10 +114,7 @@ export interface Printer {
 /** A photo from Immich, served (resized and cached) by the server. */
 export interface Photo {
   id: string;
-  url: string; // screen-sized image
-  /** The same photo heavily blurred and small (e.g. from Immich's thumbhash); stretched to the
-   *  screen it gives the frosted glass behind the screensaver clock without a live blur. */
-  blurUrl: string | null;
+  url: string; // screen-sized image, /api/photos/<id>.jpg
   takenAt: string; // ISO 8601
   place: string | null;
 }

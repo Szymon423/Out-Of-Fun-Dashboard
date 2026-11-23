@@ -1,8 +1,12 @@
 // Settings from <data dir>/config.json. The data dir survives updates (/data on the Pi).
 // A missing file is created as a template to fill in:
-//   { "location": { "name": "Kraków" } }
+//   {
+//     "location": { "name": "Kraków" },
+//     "immich": { "url": "http://192.168.1.20:2283", "apiKey": "..." }
+//   }
 // With only a name the place is looked up (Open-Meteo geocoding); latitude and longitude
-// may be given instead, then the name is only shown.
+// may be given instead, then the name is only shown. The Immich API key needs the
+// permissions asset.read, asset.view and memory.read.
 #pragma once
 
 #include <filesystem>
@@ -19,8 +23,14 @@ struct Location {
   bool empty() const { return name.empty() && !latitude; }
 };
 
+struct ImmichSettings {
+  std::string url; // without a trailing slash
+  std::string api_key;
+};
+
 struct Config {
   Location location;
+  std::optional<ImmichSettings> immich;
 };
 
 /** Reads the config; throws std::runtime_error with the reason when it cannot be used. */

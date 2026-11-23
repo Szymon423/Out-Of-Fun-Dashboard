@@ -5,7 +5,16 @@
 // the weather card.
 import { mockState } from './mock';
 import { mockPhotos } from './mockPhotos';
-import type { CalendarSource, DashboardState, Display, Light, NowPlaying, Photos, Printer, Update } from './types';
+import type {
+  CalendarSource,
+  DashboardState,
+  Display,
+  Light,
+  NowPlaying,
+  Photos,
+  Printer,
+  Update,
+} from './types';
 
 export const dash: DashboardState = $state({
   weather: null,

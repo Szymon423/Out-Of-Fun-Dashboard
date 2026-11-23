@@ -1,10 +1,11 @@
 <!--
-  Screensaver in the spirit of iPhone StandBy: Immich photos with crossfade and a slow zoom,
-  at any time of day, with a big thin clock and the weather on a frosted panel. (A night look
-  with only a dim clock on black was dropped on 2026-11-22: the user wants the photos always.)
-  A touch closes it.
-  `covered` turns true once it fully covers the screen, so the pages underneath can stop
-  being drawn.
+  Screensaver in the spirit of Apple TV and the Nest Hub: Immich photos full screen with
+  crossfade and a slow zoom, at any time of day. A thin clock with the date and the weather
+  sits in the bottom left corner, where the photo place and date sit on the right, both on a
+  soft shade along the bottom edge; the photo stays the main thing. (A big frosted panel
+  with the clock was dropped on 2026-11-23: it covered too much of the photo.)
+  A touch closes it. `covered` turns true once it fully covers the screen, so the pages
+  underneath can stop being drawn.
 -->
 <script lang="ts">
   import { fade } from 'svelte/transition';
@@ -17,19 +18,15 @@
 
   let { covered = $bindable(false) }: { covered?: boolean } = $props();
 
+  const SLIDE_MS = 20000;
+  const monthYear = new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric' });
+
   const photos = $derived(dash.photos?.items ?? []);
   const w = $derived(dash.weather);
   const look = $derived(w ? weatherLook(w.now.code, w.now.isDay) : null);
 
   let current = $state(0);
   const photo = $derived(photos.length ? photos[current % photos.length] : null);
-
-  // The frosted panel behind the clock shows the blurred copy of the current photo, placed
-  // where the photo is on screen, so the panel looks like glass over it.
-  const SLIDE_MS = 20000;
-  const PANEL_LEFT = 40;
-  const PANEL_BOTTOM = 40;
-  let panelHeight = $state(0);
 
   function close(e: PointerEvent): void {
     e.stopPropagation();
@@ -47,41 +44,28 @@
     onoutrostart={() => (covered = false)}
   >
     {#if photos.length}<Slideshow {photos} intervalMs={SLIDE_MS} bind:current />{/if}
-    <div class="scrim"></div>
-    <div
-      class="panel"
-      style:left="{PANEL_LEFT}px"
-      style:bottom="{PANEL_BOTTOM}px"
-      style:--zoom-ms="{SLIDE_MS + 2500}ms"
-      bind:clientHeight={panelHeight}
-    >
-      {#if photo}
-        {#key photo.id}
-          <img
-            class="glass"
-            class:even={current % 2 === 0}
-            src={photo.blurUrl ?? photo.url}
-            class:live-blur={!photo.blurUrl}
-            alt=""
-            style:left="{-PANEL_LEFT}px"
-            style:top="{panelHeight + PANEL_BOTTOM - 720}px"
-            in:fade={{ duration: 1600 }}
-            out:fade={{ duration: 1600 }}
-          />
-        {/key}
-      {/if}
-      <i class="tint"></i>
-      <div class="content">
-        <div class="date">{longDate(clock.now)}</div>
-        <div class="time num" style={clockStyle(230)}>{hhmm(clock.now)}</div>
+    <div class="shade"></div>
+
+    <div class="clock">
+      <div class="time num" style={clockStyle(150)}>{hhmm(clock.now)}</div>
+      <div class="line num">
+        {longDate(clock.now)}
         {#if w && look}
-          <div class="weather num">
-            <look.icon size={28} strokeWidth={1.6} />
-            {temp(w.now.temp)} · {look.label}
-          </div>
+          <span class="dot">·</span>
+          <look.icon size={24} strokeWidth={1.7} />
+          {temp(w.now.temp)}
         {/if}
       </div>
     </div>
+
+    {#if photo}
+      {#key photo.id}
+        <div class="about" in:fade={{ duration: 1200, delay: 400 }} out:fade={{ duration: 600 }}>
+          {#if photo.place}<div class="place">{photo.place}</div>{/if}
+          <div class="when">{monthYear.format(new Date(photo.takenAt))}</div>
+        </div>
+      {/key}
+    {/if}
   </div>
 {/if}
 
@@ -96,81 +80,56 @@
     will-change: opacity; /* painted as a layer from the start, not when the fade-out begins */
   }
 
-  .scrim {
+  /* Only the bottom edge is darkened, enough for white text on a bright photo. */
+  .shade {
     position: absolute;
     inset: 0;
-    background:
-      linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent 55%),
-      linear-gradient(to right, rgba(0, 0, 0, 0.35), transparent 60%);
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.22) 20%, transparent 42%);
   }
 
-  /* Frosted glass: the blurred photo (no live filter), a light tint and a bright edge. */
-  .panel {
+  .clock,
+  .about {
     position: absolute;
-    border-radius: 38px;
-    overflow: hidden;
-    box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.22) inset,
-      0 24px 70px rgba(0, 0, 0, 0.35);
+    bottom: 40px;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.3);
   }
 
-  .glass {
-    position: absolute;
-    width: 1280px;
-    height: 720px;
-    object-fit: cover;
-    will-change: transform, opacity;
-    transform-origin: 30% 40%;
-    animation: zoom var(--zoom-ms) ease-out forwards;
-  }
-
-  .glass.even {
-    transform-origin: 70% 60%;
-  }
-
-  /* Without a ready blurred copy (a server that does not send one yet), blur the photo live. */
-  .glass.live-blur {
-    filter: blur(40px);
-  }
-
-  .tint {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.28));
-  }
-
-  .content {
-    position: relative;
-    padding: 26px 40px 30px 34px;
-  }
-
-  .content .date {
-    font-size: 28px;
-    font-weight: 560;
-    opacity: 0.95;
-  }
-
-  @keyframes zoom {
-    from {
-      transform: scale(1);
-    }
-    to {
-      transform: scale(1.08);
-    }
+  .clock {
+    left: 48px;
   }
 
   .time {
-    line-height: 0.88;
-    margin-left: -6px;
+    line-height: 0.9;
+    margin-left: -4px;
   }
 
-  .content .weather {
+  .line {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 14px;
-    font-size: 22px;
-    font-weight: 500;
-    opacity: 0.92;
+    gap: 9px;
+    margin-top: 12px;
+    font-size: 23px;
+    font-weight: 520;
+    opacity: 0.95;
+  }
+
+  .dot {
+    opacity: 0.6;
+  }
+
+  .about {
+    right: 48px;
+    text-align: right;
+  }
+
+  .place {
+    font-size: 21px;
+    font-weight: 620;
+  }
+
+  .when {
+    margin-top: 3px;
+    font-size: 17px;
+    opacity: 0.78;
   }
 </style>

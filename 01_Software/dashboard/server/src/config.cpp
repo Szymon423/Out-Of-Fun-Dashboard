@@ -46,6 +46,15 @@ Config load_config(const std::filesystem::path &data_dir) {
       config.location.longitude = loc->at("longitude").get<double>();
     }
   }
+  if (const auto immich = doc.find("immich"); immich != doc.end() && immich->is_object()) {
+    ImmichSettings settings{immich->value("url", ""), immich->value("apiKey", "")};
+    while (settings.url.ends_with('/')) settings.url.pop_back();
+    if (settings.url.empty() || settings.api_key.empty()) {
+      log_error("{}: immich needs both url and apiKey; no photos", path.string()); // weather still works
+    } else {
+      config.immich = std::move(settings);
+    }
+  }
   return config;
 }
 

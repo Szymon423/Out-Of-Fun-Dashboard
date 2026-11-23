@@ -32,13 +32,24 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
   - `config.json` w katalogu danych tworzy się sam jako szablon:
 
     ```json
-    { "location": { "name": "Kraków" } }
+    {
+      "location": { "name": "Kraków" },
+      "immich": { "url": "http://192.168.1.20:2283", "apiKey": "…" }
+    }
     ```
 
-    Sama nazwa wystarcza, bo serwer szuka współrzędnych w geokoderze Open-Meteo. Można też podać `latitude` i `longitude`, wtedy nazwa jest tylko wyświetlana. Bez miejscowości nie ma pogody.
+    Plik zawiera klucz API, więc leży tylko w `/data/dashboard` na Pi i w `devdata/` na PC, oba poza gitem. Sama nazwa wystarcza, bo serwer szuka współrzędnych w geokoderze Open-Meteo. Można też podać `latitude` i `longitude`, wtedy nazwa jest tylko wyświetlana. Bez miejscowości nie ma pogody.
   - Zepsuty `config.json` nie zatrzymuje serwera: działa dalej bez tej części. Gdyby się zatrzymywał, health check odrzuciłby aktualizację, a poprzedni slot czyta ten sam `/data`.
   - Pogoda: Open-Meteo co 15 min. Po błędzie ponawia po 1 min, potem co dwa razy dłużej, maksymalnie co 15 min.
   - Światła: makieta zapisywana w `lights.json`, więc stan przetrwa restart.
+  - Zdjęcia z Immicha (D3):
+    - Co 30 min serwer prosi o 100 losowych zdjęć z całej biblioteki. Zostawia do 30 poziomych, od 5:4 do 2,4:1, z uwzględnieniem orientacji EXIF. Odpadają pionowe, panoramy, zarchiwizowane, ukryte i usunięte. Pionowe źle wyglądałyby przycięte do ekranu 16:9.
+    - Do tego raz dziennie wspomnienie „N lat temu”.
+    - Podglądy (`size=preview`, JPEG około 1440 px) trafiają do `/data/dashboard/photos` i są podawane jako `/api/photos/<id>.jpg`. Klucz API nie trafia do przeglądarki, a wygaszacz nie czeka na Immicha. Pamięć podręczna trzyma bieżącą partię, poprzednią i wspomnienie, czyli około 60 plików.
+    - Klucz API potrzebuje uprawnień `asset.read` (wyszukiwanie), `asset.view` (podglądy) i `memory.read` (wspomnienia).
+    - Podglądy z Immicha mają 2560×1440 albo 1920×1440. To więcej niż trzeba dla ekranu, ale pamięć jest w normie.
+      - Pomiar 23.11.2026 przez 4 min wygaszacza: proces WebKit trzyma 250–295 MB, oddaje pamięć i nie rośnie. Wolnej pamięci zostaje około 1,4 GB.
+      - Gdyby przenikanie się zacinało, serwer może zmniejszać podglądy do około 1600×900 przy pobieraniu (libjpeg-turbo, skalowanie w dekoderze).
   - Jasność: `/sys/class/backlight/*/brightness`. Touch Display 2 ma skalę 0–31. Serwer nigdy nie zapisuje 0, bo to całkiem gasi podświetlenie.
   - `Type=notify`: serwer zgłasza gotowość dopiero z otwartym portem, więc kiosk startuje po nim i nie trafia na pusty adres.
   - SSE zaczyna od wszystkich tematów naraz, więc nic nie ginie między `/api/state` a otwarciem strumienia. Bez zmian strumień co 15 s wysyła komentarz.
@@ -76,15 +87,17 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
   - Jasny i ciemny jako zestawy zmiennych CSS w `app.css`.
   - Auto przełącza o wschodzie i zachodzie słońca z prognozy, a bez prognozy o 7:00 i 19:00.
   - Ręczny wybór działa do najbliższego wschodu albo zachodu, jak w iOS.
-- **Wygaszacz w stylu StandBy.**
-  - Zegar stoi na matowym, szklanym panelu, więc jest czytelny także na jasnym zdjęciu.
-    - Panel pokazuje gotową, rozmytą kopię bieżącego zdjęcia (`Photo.blurUrl`), wyrównaną do tła i przybliżaną razem z nim. Na wierzchu jest lekkie przyciemnienie i jasna krawędź.
-    - Bez żywego `backdrop-filter`, który przy ciągle przybliżanym zdjęciu kosztowałby Pi rozmycie w każdej klatce.
-    - Rozmytą kopię da serwer, np. z `thumbhash` Immicha. Bez niej panel rozmywa zdjęcie na żywo (`filter: blur`).
+- **Wygaszacz w stylu Apple TV i Nest Hub** (od 23.11.2026).
+  - Zdjęcie zajmuje cały ekran.
+  - W lewym dolnym rogu jest cienki zegar (150 px) z datą i pogodą. W prawym drobno widać miejsce oraz miesiąc i rok zdjęcia.
+  - Napisy są czytelne dzięki łagodnemu przyciemnieniu samego dołu ekranu.
+  - Wcześniejszy duży, matowy panel pod zegarem użytkownik odrzucił, bo za bardzo zasłaniał zdjęcie. Razem z nim zniknęła rozmyta kopia zdjęcia (`blurUrl`, `thumbhash`).
   - Startuje po 5 min bez dotyku i wraca pod spodem na podsumowanie.
-  - W dzień: zdjęcia z Immicha z przenikaniem i powolnym przybliżaniem, duży zegar i pogoda.
+  - Zdjęcia z Immicha z przenikaniem i powolnym przybliżaniem, zmiana co 20 s.
+  - Następne i poprzednie zdjęcie są dekodowane z wyprzedzeniem (`Image.decode()`), więc przenikanie zaczyna się od gotowego obrazu.
   - Zdjęcia są o każdej porze. Nocny wygląd z samym przyciemnionym zegarem na czarnym tle usunęliśmy 22.11.2026 na życzenie użytkownika. W nocy ekran może ściemnić podświetlenie (D6).
   - Strony pod zasłoniętym wygaszaczem nie są rysowane.
+- **Pulpit zdjęć.** Stuknięcie w lewą lub prawą trzecią część ekranu cofa albo przechodzi dalej, jak w aplikacji Zdjęcia; strzałka mignie przy dotknięciu. Ręczna zmiana zaczyna od nowa odliczanie do następnego zdjęcia. Przesunięcie palcem dalej zmienia pulpit.
 - **Zegar.** Wysoki i cienki krój do wyboru na ekranie przez `?fonts`. Kandydaci są w `clockFont.svelte.ts`, a po wyborze zbędne paczki znikną.
 - **Światła.** Na razie to makieta.
   - Lampka lewa i prawa: tylko włącz/wyłącz.
@@ -151,6 +164,7 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
 | `GET /api/health` | `{ "ok": true, "uptimeS": … }`, dla health checku |
 | `GET /api/events` | SSE, zdarzenie `update` z `{ "topic": "weather" \| "calendars" \| "events" \| "music" \| "lights" \| "printer" \| "photos" \| "display", "data": … }` |
 | `POST /api/music/{play,pause,next,previous}` | Sterowanie Spotify; do D4 odpowiada 501 |
+| `GET /api/photos/{id}.jpg` | podgląd zdjęcia z Immicha, z pamięci podręcznej serwera |
 | `POST /api/lights/{id}` | `{ "on": bool }`, dla RGBW też `"brightness": 0–100`, `"color": "#rrggbb"`, `"white": 0–100`; na razie makieta |
 | `POST /api/display` | `{ "brightness": 0–100 }`, czyli podświetlenie ekranu |
 
@@ -174,7 +188,7 @@ Typy danych są w `web/src/lib/types.ts`. Serwer zwraca dokładnie te pola.
 | D1 | Szkielet frontendu na danych testowych: pulpity z przeglądem, motywy, wygaszacz, podsumowanie i pierwsze wersje pulpitów | wygląd, gesty i płynność na ekranie Pi przez `kiosk-url.sh dev`; wybór kroju zegara |
 | D2a | Serwer C++: pliki statyczne, `/api/state`, SSE, pogoda z Open-Meteo, światła (makieta), jasność ekranu; na PC | gotowe 23.11.2026: prawdziwa pogoda na Pi przez `kiosk-url.sh dev` |
 | D2b | Przepisy Yocto `dashboard-server` i `dashboard-web`, kiosk na `127.0.0.1:8080`, serwer w `dashboard-health` | gotowe 23.11.2026: wersja 0.4 przez OTA, health check przeszedł, pogoda dla Wrocławia, jasność zapisuje się do podświetlenia, serwer zajmuje 14 MB RAM |
-| D3 | Zdjęcia z Immicha jako tło: klucz API, wybór albumu, przenikanie, pamięć podręczna na `/data` | płynne przenikanie, pamięć RAM |
+| D3 | Zdjęcia z Immicha: losowe poziome z całej biblioteki, wspomnienia, pamięć podręczna na `/data`, stuknięcia na pulpicie zdjęć, nowy wygaszacz | sprawdzone 23.11.2026 na Pi przez `kiosk-url.sh dev`: zdjęcia, przenikanie i pamięć w porządku; do zrobienia aktualizacja OTA |
 | D4 | Spotify: autoryzacja (jednorazowo z PC albo kod QR na ekranie), co gra, sterowanie | sterowanie z ekranu |
 | D4b | Drukarka Bambu Lab przez lokalne MQTT (stan, postęp, temperatury, AMS) | prawdziwy wydruk widoczny na pulpicie |
 | D5 | Kalendarze Microsoft: device code flow z kodem na ekranie | najpierw sprawdzić, czy polityka służbowego tenanta na to pozwala |

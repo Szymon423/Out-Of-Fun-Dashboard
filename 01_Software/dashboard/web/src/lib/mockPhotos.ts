@@ -29,24 +29,7 @@ function seeded(seed: number): () => number {
   };
 }
 
-/** A blurred copy: shrink in two steps, then grow back with smoothing. Done once per photo;
- *  shown stretched, it needs no CSS filter at run time. */
-function blurred(source: HTMLCanvasElement): string {
-  const step = (from: CanvasImageSource, w: number, h: number) => {
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const g = c.getContext('2d')!;
-    g.imageSmoothingEnabled = true;
-    g.imageSmoothingQuality = 'high';
-    g.drawImage(from, 0, 0, w, h);
-    return c;
-  };
-  const tiny = step(step(source, 160, 90), 32, 18);
-  return step(step(tiny, 96, 54), 320, 180).toDataURL('image/jpeg', 0.85);
-}
-
-async function landscape(index: number, w = 1280, h = 720): Promise<{ url: string; blurUrl: string }> {
+async function landscape(index: number, w = 1280, h = 720): Promise<string> {
   const rnd = seeded(index + 7);
   const p = PALETTES[index % PALETTES.length];
   const c = document.createElement('canvas');
@@ -100,7 +83,7 @@ async function landscape(index: number, w = 1280, h = 720): Promise<{ url: strin
   }
 
   const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.88));
-  return { url: blob ? URL.createObjectURL(blob) : c.toDataURL('image/jpeg', 0.88), blurUrl: blurred(c) };
+  return blob ? URL.createObjectURL(blob) : c.toDataURL('image/jpeg', 0.88);
 }
 
 /** `placeholder`: no made-up Immich memory, an album name that says what these are. */
@@ -109,8 +92,7 @@ export async function mockPhotos(placeholder = false): Promise<Photos> {
   for (let i = 0; i < PALETTES.length; i++) {
     const taken = new Date();
     taken.setFullYear(taken.getFullYear() - 1 - (i % 4));
-    const { url, blurUrl } = await landscape(i);
-    items.push({ id: `mock-${i}`, url, blurUrl, takenAt: taken.toISOString(), place: PLACES[i] });
+    items.push({ id: `mock-${i}`, url: await landscape(i), takenAt: taken.toISOString(), place: PLACES[i] });
   }
   if (placeholder) return { album: 'Pejzaże', items, memory: null };
   return { album: 'Ulubione', items, memory: { title: 'Rok temu', photo: items[0] } };

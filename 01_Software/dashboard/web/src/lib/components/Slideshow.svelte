@@ -1,6 +1,8 @@
 <!-- Photo slideshow with crossfade and a slow zoom (Ken Burns), used by the photos page and
      the screensaver. Only two images exist at a time; both effects animate opacity and
-     transform, so the compositor does all the work between photo changes. -->
+     transform, so the compositor does all the work between photo changes. The next and the
+     previous photo are decoded in advance, so a change (by itself or by a tap) starts its
+     crossfade with a ready picture. Changing `current` from outside restarts the wait. -->
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import type { Photo } from '../types';
@@ -14,10 +16,34 @@
 
   const photo = $derived(photos.length ? photos[current % photos.length] : null);
 
+  /** Fetches and decodes a photo off the main thread; later <img> uses reuse the result. */
+  function preload(url: string): Promise<void> {
+    const img = new Image();
+    img.src = url;
+    return img.decode().catch(() => {}); // a broken photo still gets its turn
+  }
+
+  // The neighbours of the current photo, ready for a tap either way.
+  $effect(() => {
+    const n = photos.length;
+    if (n < 2) return;
+    void preload(photos[(current + 1) % n].url);
+    void preload(photos[(current - 1 + n) % n].url);
+  });
+
   $effect(() => {
     if (!running || photos.length < 2) return;
-    const timer = setInterval(() => (current = (current + 1) % photos.length), intervalMs);
-    return () => clearInterval(timer);
+    const from = current; // read here, so any change of current restarts the wait
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const next = (from + 1) % photos.length;
+      await preload(photos[next].url);
+      if (!cancelled) current = next;
+    }, intervalMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   });
 </script>
 

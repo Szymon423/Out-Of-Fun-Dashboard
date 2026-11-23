@@ -14,7 +14,9 @@ namespace dash {
 
 class HttpServer {
 public:
-  HttpServer(Hub &hub, Lights &lights, Display &display, const std::filesystem::path &web_dir);
+  /** `photos_dir` holds the cached Immich previews served as /api/photos/<file>. */
+  HttpServer(Hub &hub, Lights &lights, Display &display, const std::filesystem::path &web_dir,
+             const std::filesystem::path &photos_dir);
   ~HttpServer();
 
   /** Binds the port; connections queue up from here on. False when the port is taken. */

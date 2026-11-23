@@ -16,6 +16,7 @@
 #include "hub.hpp"
 #include "lights.hpp"
 #include "log.hpp"
+#include "immich.hpp"
 #include "systemd.hpp"
 #include "weather.hpp"
 
@@ -116,8 +117,15 @@ int main(int argc, char **argv) {
   } else {
     weather.emplace(hub, config.location);
   }
+  const fs::path photos_dir = options.data / "photos";
+  std::optional<PhotosProvider> photos;
+  if (config.immich) {
+    photos.emplace(hub, *config.immich, photos_dir);
+  } else {
+    log_info("photos: no immich in {}/config.json, the page shows placeholders", options.data.string());
+  }
 
-  HttpServer http(hub, lights, display, options.web);
+  HttpServer http(hub, lights, display, options.web, photos_dir);
   if (!http.bind(options.host, options.port)) {
     log_error("cannot listen on {}:{}: {}", options.host, options.port, std::strerror(errno));
     return 1;
@@ -141,6 +149,7 @@ int main(int argc, char **argv) {
   if (!stopping.exchange(true)) pthread_kill(signals.native_handle(), SIGTERM); // wake it to end
   signals.join();
 
+  photos.reset();
   weather.reset();
   curl_global_cleanup();
   return 0;

@@ -38,7 +38,8 @@ struct HttpServer::Impl {
   std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
 };
 
-HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, const std::filesystem::path &web_dir)
+HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, const std::filesystem::path &web_dir,
+                       const std::filesystem::path &photos_dir)
     : impl_(std::make_unique<Impl>()) {
   auto &server = impl_->server;
   auto *impl = impl_.get();
@@ -93,6 +94,15 @@ HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, const std::fi
       }
       return sink.write(out.data(), out.size()); // false: the page went away
     });
+  });
+
+  // Cached Immich previews (immich.hpp). The name is the asset id, so a file never changes.
+  server.Get(R"(/api/photos/([0-9a-f-]{36}\.(jpg|webp)))", [photos_dir](const httplib::Request &req,
+                                                                     httplib::Response &res) {
+    const auto file = photos_dir / req.matches[1].str();
+    if (!std::filesystem::is_regular_file(file)) return send_error(res, 404, "no such photo");
+    res.set_file_content(file.string(), req.matches[2] == "jpg" ? "image/jpeg" : "image/webp");
+    res.set_header("Cache-Control", "public, max-age=31536000, immutable");
   });
 
   server.Post("/api/lights/:id", [&lights](const httplib::Request &req, httplib::Response &res) {
