@@ -24,6 +24,7 @@ build/server/dashboard-server --web web/dist --data devdata
 - `devdata/` (poza gitem) zastępuje `/data/dashboard` z Pi. Plik `devdata/config.json` serwer tworzy sam przy pierwszym starcie; trzeba w nim wpisać miejscowość, żeby była pogoda (opis w [docs/plan.md](docs/plan.md)).
 - Podświetlenie: na PC domyślnie `--backlight none`, czyli jasność jest tylko zapamiętywana. Na Pi usługa uruchamia serwer z `--backlight auto`.
 - Lokalny build i `devdata/` leżą poza `server/`, bo przepis Yocto kopiuje cały ten katalog.
+- Spotify: `./tools/spotify-login.py --local devdata` loguje serwer na PC, a `./tools/spotify-login.py` loguje Pi. Szczegóły są w [docs/plan.md](docs/plan.md).
 
 ## Wygląd na ekranie Pi, z przeładowaniem na żywo
 

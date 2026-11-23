@@ -34,7 +34,8 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
     ```json
     {
       "location": { "name": "Kraków" },
-      "immich": { "url": "http://192.168.1.20:2283", "apiKey": "…" }
+      "immich": { "url": "http://192.168.1.20:2283", "apiKey": "…" },
+      "spotify": { "clientId": "…" }
     }
     ```
 
@@ -156,6 +157,20 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
 - Tryb deweloperski Vite dawał te same liczby co wersja produkcyjna, więc JavaScript nie był wąskim gardłem.
 - Ruch tła kosztuje 1–2 kl./s.
 
+- **Spotify (D4).**
+  - Aplikacja na developer.spotify.com ma tylko Web API i adres przekierowania `http://127.0.0.1:8888/callback`. Spotify od 2025 r. nie przyjmuje `localhost`.
+  - Logowanie odbywa się raz, na PC: `tools/spotify-login.py`. To kod autoryzacji z PKCE, więc nie trzeba sekretu klienta.
+    - Przeglądarka wraca na adres pętli zwrotnej PC, więc to musi dziać się na PC, a nie na Pi.
+    - Token odświeżania trafia do `/data/dashboard/spotify.json` (0600), a serwer uruchamia się ponownie.
+    - `--local devdata` loguje serwer na PC.
+  - Serwer odnawia dostęp sam i zapisuje nowy token odświeżania, gdy Spotify go wymieni.
+    - Gdy logowanie wygaśnie lub zostanie cofnięte, serwer usuwa plik, a w logu prosi o ponowne logowanie.
+    - Nowy plik podchwytuje w ciągu 30 s.
+  - Odczyt `GET /v1/me/player`: co 5 s, gdy coś gra (i zaraz po spodziewanym końcu utworu), co 20 s w przeciwnym razie. Szanuje `Retry-After` przy 429.
+  - `music` wychodzi tylko wtedy, gdy zmienia się utwór, stan, urządzenie albo pozycja odbiega o ponad 2,5 s. Pasek postępu strona przesuwa sama, więc częste aktualizacje tylko by go restartowały.
+  - Sterowanie: `PUT /me/player/play|pause`, `POST /me/player/next|previous`. Bez aktywnego urządzenia serwer odpowiada 409, a bez logowania 503.
+  - Sterowanie wymaga Spotify Premium.
+
 ## API (wspólne dla frontendu i serwera)
 
 | Ścieżka | Opis |
@@ -163,7 +178,7 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
 | `GET /api/state` | Pełny stan: `weather`, `calendars`, `events`, `music`, `lights`, `printer`, `photos`, `display`. Każde pole może być `null`, gdy dostawca jeszcze nie ma danych albo nie jest skonfigurowany. |
 | `GET /api/health` | `{ "ok": true, "uptimeS": … }`, dla health checku |
 | `GET /api/events` | SSE, zdarzenie `update` z `{ "topic": "weather" \| "calendars" \| "events" \| "music" \| "lights" \| "printer" \| "photos" \| "display", "data": … }` |
-| `POST /api/music/{play,pause,next,previous}` | Sterowanie Spotify; do D4 odpowiada 501 |
+| `POST /api/music/{play,pause,next,previous}` | Sterowanie Spotify: 204, 409 bez aktywnego urządzenia, 503 bez logowania |
 | `GET /api/photos/{id}.jpg` | podgląd zdjęcia z Immicha, z pamięci podręcznej serwera |
 | `POST /api/lights/{id}` | `{ "on": bool }`, dla RGBW też `"brightness": 0–100`, `"color": "#rrggbb"`, `"white": 0–100`; na razie makieta |
 | `POST /api/display` | `{ "brightness": 0–100 }`, czyli podświetlenie ekranu |
@@ -189,7 +204,7 @@ Typy danych są w `web/src/lib/types.ts`. Serwer zwraca dokładnie te pola.
 | D2a | Serwer C++: pliki statyczne, `/api/state`, SSE, pogoda z Open-Meteo, światła (makieta), jasność ekranu; na PC | gotowe 23.11.2026: prawdziwa pogoda na Pi przez `kiosk-url.sh dev` |
 | D2b | Przepisy Yocto `dashboard-server` i `dashboard-web`, kiosk na `127.0.0.1:8080`, serwer w `dashboard-health` | gotowe 23.11.2026: wersja 0.4 przez OTA, health check przeszedł, pogoda dla Wrocławia, jasność zapisuje się do podświetlenia, serwer zajmuje 14 MB RAM |
 | D3 | Zdjęcia z Immicha: losowe poziome z całej biblioteki, wspomnienia, pamięć podręczna na `/data`, stuknięcia na pulpicie zdjęć, nowy wygaszacz | sprawdzone 23.11.2026 na Pi przez `kiosk-url.sh dev`: zdjęcia, przenikanie i pamięć w porządku; do zrobienia aktualizacja OTA |
-| D4 | Spotify: autoryzacja (jednorazowo z PC albo kod QR na ekranie), co gra, sterowanie | sterowanie z ekranu |
+| D4 | Spotify: logowanie raz z PC (`tools/spotify-login.py`), co gra, sterowanie | kod gotowy 23.11.2026; sterowanie z ekranu po zalogowaniu |
 | D4b | Drukarka Bambu Lab przez lokalne MQTT (stan, postęp, temperatury, AMS) | prawdziwy wydruk widoczny na pulpicie |
 | D5 | Kalendarze Microsoft: device code flow z kodem na ekranie | najpierw sprawdzić, czy polityka służbowego tenanta na to pozwala |
 | D6 | Dopracowanie: noc (ściemnianie podświetlenia), ustawienia, stany błędów i braku sieci | – |

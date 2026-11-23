@@ -2,11 +2,13 @@
 // A missing file is created as a template to fill in:
 //   {
 //     "location": { "name": "Kraków" },
-//     "immich": { "url": "http://192.168.1.20:2283", "apiKey": "..." }
+//     "immich": { "url": "http://192.168.1.20:2283", "apiKey": "..." },
+//     "spotify": { "clientId": "..." }
 //   }
 // With only a name the place is looked up (Open-Meteo geocoding); latitude and longitude
 // may be given instead, then the name is only shown. The Immich API key needs the
-// permissions asset.read, asset.view and memory.read.
+// permissions asset.read, asset.view and memory.read. The Spotify client ID is that of the
+// app on developer.spotify.com; the login itself is tools/spotify-login.py (spotify.hpp).
 #pragma once
 
 #include <filesystem>
@@ -31,6 +33,7 @@ struct ImmichSettings {
 struct Config {
   Location location;
   std::optional<ImmichSettings> immich;
+  std::optional<std::string> spotify_client_id;
 };
 
 /** Reads the config; throws std::runtime_error with the reason when it cannot be used. */

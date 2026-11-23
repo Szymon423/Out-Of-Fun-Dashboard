@@ -17,6 +17,7 @@
 #include "lights.hpp"
 #include "log.hpp"
 #include "immich.hpp"
+#include "spotify.hpp"
 #include "systemd.hpp"
 #include "weather.hpp"
 
@@ -125,7 +126,14 @@ int main(int argc, char **argv) {
     log_info("photos: no immich in {}/config.json, the page shows placeholders", options.data.string());
   }
 
-  HttpServer http(hub, lights, display, options.web, photos_dir);
+  std::optional<Spotify> spotify;
+  if (config.spotify_client_id) {
+    spotify.emplace(hub, *config.spotify_client_id, options.data / "spotify.json");
+  } else {
+    log_info("spotify: no spotify.clientId in {}/config.json, no music", options.data.string());
+  }
+
+  HttpServer http(hub, lights, display, spotify ? &*spotify : nullptr, options.web, photos_dir);
   if (!http.bind(options.host, options.port)) {
     log_error("cannot listen on {}:{}: {}", options.host, options.port, std::strerror(errno));
     return 1;
@@ -149,6 +157,7 @@ int main(int argc, char **argv) {
   if (!stopping.exchange(true)) pthread_kill(signals.native_handle(), SIGTERM); // wake it to end
   signals.join();
 
+  spotify.reset();
   photos.reset();
   weather.reset();
   curl_global_cleanup();

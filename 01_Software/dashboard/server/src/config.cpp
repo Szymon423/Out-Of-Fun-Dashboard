@@ -55,6 +55,9 @@ Config load_config(const std::filesystem::path &data_dir) {
       config.immich = std::move(settings);
     }
   }
+  if (const auto spotify = doc.find("spotify"); spotify != doc.end() && spotify->is_object()) {
+    if (std::string id = spotify->value("clientId", ""); !id.empty()) config.spotify_client_id = std::move(id);
+  }
   return config;
 }
 

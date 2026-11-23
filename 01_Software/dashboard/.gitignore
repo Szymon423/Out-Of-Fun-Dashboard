@@ -1,3 +1,5 @@
 # Local server build and its data directory (docs/plan.md, "Serwer na PC").
 /build/
 /devdata/
+# Python bytecode of tools/*.py.
+__pycache__/

@@ -1,10 +1,12 @@
 <!-- Track progress: a single scaleX animation from the current position to the end of the
-     track, run by the compositor, plus the elapsed time text updated once a second. -->
+     track, run by the compositor, plus the elapsed time text updated once a second.
+     `middle` goes between the two times, e.g. the play controls. -->
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { duration } from '../format';
   import type { NowPlaying } from '../types';
 
-  let { music, times = true }: { music: NowPlaying; times?: boolean } = $props();
+  let { music, times = true, middle }: { music: NowPlaying; times?: boolean; middle?: Snippet } = $props();
 
   let fill: HTMLElement | undefined = $state();
   let elapsedMs = $state(0);
@@ -41,6 +43,7 @@
   {#if times}
     <div class="times num">
       <span>{duration(elapsedMs)}</span>
+      {@render middle?.()}
       <span>−{duration(music.durationMs - elapsedMs)}</span>
     </div>
   {/if}
@@ -65,6 +68,7 @@
 
   .times {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     margin-top: 6px;
     font-size: 12.5px;

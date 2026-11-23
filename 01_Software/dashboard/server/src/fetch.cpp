@@ -2,6 +2,8 @@
 
 #include <curl/curl.h>
 
+#include <algorithm>
+#include <cctype>
 #include <format>
 #include <memory>
 
@@ -13,6 +15,24 @@ constexpr const char *kUserAgent = "out-of-fun-dashboard/0.1";
 
 std::size_t append(char *data, std::size_t size, std::size_t count, void *out) {
   static_cast<std::string *>(out)->append(data, size * count);
+  return size * count;
+}
+
+/** Keeps the Retry-After header, the only response header we need. */
+std::size_t header(char *data, std::size_t size, std::size_t count, void *out) {
+  const std::string_view line(data, size * count);
+  constexpr std::string_view kName = "retry-after:";
+  if (line.size() > kName.size()) {
+    std::string name(line.substr(0, kName.size()));
+    std::ranges::transform(name, name.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (name == kName) {
+      try {
+        *static_cast<std::optional<int> *>(out) = std::stoi(std::string(line.substr(kName.size())));
+      } catch (const std::exception &) {
+        // an HTTP date instead of seconds: ignore, the caller has its own backoff
+      }
+    }
+  }
   return size * count;
 }
 
@@ -31,22 +51,31 @@ HttpResponse http_fetch(const HttpRequest &request) {
   const std::unique_ptr<CURL, CurlDeleter> curl(curl_easy_init());
   if (!curl) throw FetchError("curl_easy_init failed");
 
-  std::unique_ptr<curl_slist, SlistDeleter> headers;
-  auto add_header = [&](const std::string &header) {
-    curl_slist *list = curl_slist_append(headers.get(), header.c_str());
-    if (!list) throw FetchError("curl_slist_append failed");
-    (void)headers.release();
-    headers.reset(list);
-  };
-  for (const auto &header : request.headers) add_header(header);
-  if (request.post_json) {
-    add_header("Content-Type: application/json");
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, request.post_json->c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, static_cast<long>(request.post_json->size()));
+  const bool sends_body = request.method == "POST" || request.method == "PUT";
+  std::vector<std::string> lines = request.headers;
+  if (sends_body && !request.content_type.empty()) lines.push_back("Content-Type: " + request.content_type);
+  curl_slist *list = nullptr;
+  for (const auto &line : lines) {
+    curl_slist *longer = curl_slist_append(list, line.c_str());
+    if (!longer) {
+      curl_slist_free_all(list);
+      throw FetchError("curl_slist_append failed");
+    }
+    list = longer;
+  }
+  const std::unique_ptr<curl_slist, SlistDeleter> headers(list);
+
+  if (sends_body) {
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, request.body.c_str());
+    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, static_cast<long>(request.body.size()));
+    if (request.method == "PUT") curl_easy_setopt(curl.get(), CURLOPT_CUSTOMREQUEST, "PUT");
+  } else if (request.method != "GET") {
+    throw FetchError("unsupported method " + request.method);
   }
   if (headers) curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
 
   std::string body;
+  std::optional<int> retry_after;
   char error[CURL_ERROR_SIZE] = {};
   curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, kUserAgent);
@@ -57,6 +86,8 @@ HttpResponse http_fetch(const HttpRequest &request) {
   curl_easy_setopt(curl.get(), CURLOPT_ACCEPT_ENCODING, "");
   curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, append);
   curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &body);
+  curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, header);
+  curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, &retry_after);
   curl_easy_setopt(curl.get(), CURLOPT_ERRORBUFFER, error);
 
   const CURLcode rc = curl_easy_perform(curl.get());
@@ -66,15 +97,16 @@ HttpResponse http_fetch(const HttpRequest &request) {
   long status = 0;
   curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &status);
   if (status < 200 || status >= 300) {
-    throw FetchError(std::format("{}: HTTP {}: {}", url, status, body.substr(0, 200)), status);
+    throw FetchError(std::format("{}: HTTP {}: {}", url, status, body.substr(0, 200)), status, retry_after);
   }
   const char *type = nullptr;
   curl_easy_getinfo(curl.get(), CURLINFO_CONTENT_TYPE, &type);
-  return {std::move(body), type ? type : ""};
+  return {status, std::move(body), type ? type : ""};
 }
 
 std::string http_get(const std::string &url, std::chrono::seconds timeout) {
-  return http_fetch({.url = url, .headers = {}, .post_json = std::nullopt, .timeout = timeout}).body;
+  return http_fetch({.url = url, .headers = {}, .method = "GET", .body = {}, .content_type = {}, .timeout = timeout})
+      .body;
 }
 
 std::string url_encode(std::string_view text) {
@@ -86,6 +118,15 @@ std::string url_encode(std::string_view text) {
     } else {
       out += std::format("%{:02X}", c);
     }
+  }
+  return out;
+}
+
+std::string form_body(const std::map<std::string, std::string> &fields) {
+  std::string out;
+  for (const auto &[name, value] : fields) {
+    if (!out.empty()) out += '&';
+    out += url_encode(name) + '=' + url_encode(value);
   }
   return out;
 }

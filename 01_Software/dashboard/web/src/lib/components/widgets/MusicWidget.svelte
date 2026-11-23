@@ -1,9 +1,13 @@
-<!-- Now playing, compact: cover, title, progress and play/pause. A tap elsewhere opens the
-     music page. -->
+<!-- Now playing, like the player on the iPhone lock screen: a large cover with the title and
+     artist beside it, underneath the progress bar with the controls between the two times.
+     The controls are plain glyphs, so the cover stays the only colour. A tap elsewhere opens
+     the music page. -->
 <script lang="ts">
   import Disc3 from '@lucide/svelte/icons/disc-3';
+  import Music from '@lucide/svelte/icons/music';
   import Pause from '@lucide/svelte/icons/pause';
   import Play from '@lucide/svelte/icons/play';
+  import SkipBack from '@lucide/svelte/icons/skip-back';
   import SkipForward from '@lucide/svelte/icons/skip-forward';
   import Speaker from '@lucide/svelte/icons/speaker';
   import { dash, music } from '../../state.svelte';
@@ -15,74 +19,76 @@
 
 <Widget to="music" class="music">
   {#if m}
-    <div class="top">
-      <span class="source">Spotify</span>
-      <span class="device"><Speaker size={14} /> {m.device}</span>
+    <div class="player">
+      <div class="now">
+        <div class="art" class:paused={!m.isPlaying}>
+          {#if m.artUrl}<img src={m.artUrl} alt="" />{:else}<div class="ph"><Disc3 size={40} strokeWidth={1.3} /></div>{/if}
+        </div>
+        <div class="info">
+          <div class="device"><Speaker size={14} /> <span>{m.device || 'Spotify'}</span></div>
+          <div class="names">
+            <div class="title">{m.title}</div>
+            <div class="artist">{m.artist}</div>
+          </div>
+        </div>
+      </div>
+
+      <TrackProgress music={m}>
+        {#snippet middle()}
+          <div class="controls">
+            <button aria-label="Poprzedni" onclick={() => music('previous')}>
+              <SkipBack size={26} fill="currentColor" strokeWidth={1.5} />
+            </button>
+            <button class="main" aria-label={m.isPlaying ? 'Pauza' : 'Graj'} onclick={() => music(m.isPlaying ? 'pause' : 'play')}>
+              {#if m.isPlaying}
+                <Pause size={34} fill="currentColor" strokeWidth={0} />
+              {:else}
+                <Play size={34} fill="currentColor" strokeWidth={0} />
+              {/if}
+            </button>
+            <button aria-label="Następny" onclick={() => music('next')}>
+              <SkipForward size={26} fill="currentColor" strokeWidth={1.5} />
+            </button>
+          </div>
+        {/snippet}
+      </TrackProgress>
     </div>
-    <div class="row">
-      <div class="art">
-        {#if m.artUrl}<img src={m.artUrl} alt="" />{:else}<div class="ph"><Disc3 size={32} strokeWidth={1.4} /></div>{/if}
-      </div>
-      <div class="info">
-        <div class="title">{m.title}</div>
-        <div class="artist">{m.artist}</div>
-        <div class="album">{m.album}</div>
-      </div>
-      <div class="controls">
-        <button class="main" aria-label={m.isPlaying ? 'Pauza' : 'Graj'} onclick={() => music(m.isPlaying ? 'pause' : 'play')}>
-          {#if m.isPlaying}<Pause size={24} fill="currentColor" strokeWidth={0} />{:else}<Play size={24} fill="currentColor" strokeWidth={0} />{/if}
-        </button>
-        <button aria-label="Następny" onclick={() => music('next')}><SkipForward size={22} fill="currentColor" /></button>
-      </div>
-    </div>
-    <div class="bar"><TrackProgress music={m} /></div>
   {:else}
-    <div class="empty">Nic teraz nie gra</div>
+    <div class="empty">
+      <Music size={30} strokeWidth={1.5} />
+      <span>Nic teraz nie gra</span>
+    </div>
   {/if}
 </Widget>
 
 <style>
-  .top {
+  .player {
     display: flex;
+    flex: 1;
+    flex-direction: column;
     justify-content: space-between;
-    margin-bottom: 16px;
-    font-size: 13.5px;
-    color: var(--muted);
+    gap: 14px;
+    min-height: 0;
   }
 
-  .source {
-    font-weight: 650;
-    color: var(--good);
-  }
-
-  .device {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .album {
-    margin-top: 1px;
-    font-size: 13.5px;
-    color: var(--faint);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .row {
+  .now {
     display: flex;
-    align-items: center;
-    gap: 16px;
+    gap: 18px;
+    min-height: 0;
   }
 
   .art {
-    width: 76px;
-    height: 76px;
+    width: 158px;
+    height: 158px;
     flex: none;
-    border-radius: 14px;
+    border-radius: 16px;
     overflow: hidden;
     box-shadow: 0 0 0 1px var(--line);
+    transition: opacity 0.4s ease;
+  }
+
+  .art.paused {
+    opacity: 0.6;
   }
 
   .art img {
@@ -96,26 +102,49 @@
     place-items: center;
     width: 100%;
     height: 100%;
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.8);
     background: linear-gradient(135deg, #5e5ce6, #ff375f 55%, #ff9f0a);
   }
 
+  /* Device at the top, title and artist down by the bottom edge of the cover. */
   .info {
+    display: flex;
     flex: 1;
+    flex-direction: column;
+    justify-content: space-between;
     min-width: 0;
+    padding: 2px 0 4px;
   }
 
-  .title {
-    font-size: 19px;
-    font-weight: 640;
+  .device {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .device span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
+  .title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    font-size: 21px;
+    font-weight: 680;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
   .artist {
-    margin-top: 2px;
-    font-size: 15px;
+    margin-top: 3px;
+    font-size: 16px;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
@@ -125,14 +154,14 @@
   .controls {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 14px;
   }
 
   .controls button {
     display: grid;
     place-items: center;
-    width: 48px;
-    height: 48px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     color: var(--text);
   }
@@ -140,20 +169,19 @@
   .controls .main {
     width: 54px;
     height: 54px;
-    background: var(--accent);
-    color: var(--accent-ink);
   }
 
   .controls button:active {
-    transform: scale(0.92);
-  }
-
-  .bar {
-    margin-top: 16px;
+    transform: scale(0.88);
+    background: var(--fill);
   }
 
   .empty {
-    color: var(--faint);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
     font-size: 16px;
+    color: var(--faint);
   }
 </style>

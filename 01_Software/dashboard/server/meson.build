@@ -28,6 +28,7 @@ core = static_library(
   'src/immich.cpp',
   'src/lights.cpp',
   'src/log.cpp',
+  'src/spotify.cpp',
   'src/weather.cpp',
   dependencies: [curl, json, threads],
 )
@@ -55,6 +56,10 @@ test(
 test(
   'immich',
   executable('immich-test', 'tests/immich_test.cpp', dependencies: core_dep, build_by_default: false),
+)
+test(
+  'spotify',
+  executable('spotify-test', 'tests/spotify_test.cpp', dependencies: core_dep, build_by_default: false),
 )
 test(
   'hub',

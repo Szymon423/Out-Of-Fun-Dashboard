@@ -38,8 +38,8 @@ struct HttpServer::Impl {
   std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
 };
 
-HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, const std::filesystem::path &web_dir,
-                       const std::filesystem::path &photos_dir)
+HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spotify,
+                       const std::filesystem::path &web_dir, const std::filesystem::path &photos_dir)
     : impl_(std::make_unique<Impl>()) {
   auto &server = impl_->server;
   auto *impl = impl_.get();
@@ -135,8 +135,26 @@ HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, const std::fi
     }
   });
 
-  server.Post("/api/music/:action", [](const httplib::Request &, httplib::Response &res) {
-    send_error(res, 501, "Spotify is not connected yet (stage D4)");
+  server.Post("/api/music/:action", [spotify](const httplib::Request &req, httplib::Response &res) {
+    const std::string &action = req.path_params.at("action");
+    if (action != "play" && action != "pause" && action != "next" && action != "previous") {
+      return send_error(res, 404, "no such action");
+    }
+    if (!spotify) return send_error(res, 503, "Spotify is not configured (spotify.clientId in config.json)");
+    switch (spotify->command(action)) {
+    case Spotify::Result::ok:
+      res.status = 204;
+      break;
+    case Spotify::Result::not_signed_in:
+      send_error(res, 503, "Spotify is not signed in (tools/spotify-login.py)");
+      break;
+    case Spotify::Result::no_device:
+      send_error(res, 409, "no Spotify device is active");
+      break;
+    case Spotify::Result::failed:
+      send_error(res, 502, "Spotify refused or did not answer");
+      break;
+    }
   });
 
   server.set_exception_handler([](const httplib::Request &req, httplib::Response &res, std::exception_ptr ep) {

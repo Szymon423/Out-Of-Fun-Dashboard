@@ -78,10 +78,11 @@ public:
   Immich(ImmichSettings settings, fs::path cache) : settings_(std::move(settings)), cache_(std::move(cache)) {}
 
   json random_assets() const {
-    return json::parse(call("/api/search/random", json{{"size", kAsk}, {"type", "IMAGE"}, {"withExif", true}}.dump()));
+    return json::parse(
+        fetch("/api/search/random", json{{"size", kAsk}, {"type", "IMAGE"}, {"withExif", true}}.dump()).body);
   }
 
-  json memories() const { return json::parse(call("/api/memories?for=" + local_date() + "T00:00:00.000Z")); }
+  json memories() const { return json::parse(fetch("/api/memories?for=" + local_date() + "T00:00:00.000Z").body); }
 
   /** Downloads the preview unless it is cached; returns the file name. */
   std::string preview(const std::string &id) const {
@@ -112,16 +113,15 @@ public:
   }
 
 private:
-  HttpResponse fetch(const std::string &path, std::optional<std::string> post_json,
+  /** GET, or POST with a JSON body. */
+  HttpResponse fetch(const std::string &path, std::optional<std::string> post_json = std::nullopt,
                      std::chrono::seconds timeout = 20s) const {
     return http_fetch({.url = settings_.url + path,
                        .headers = {"x-api-key: " + settings_.api_key, "Accept: application/json, image/*"},
-                       .post_json = std::move(post_json),
+                       .method = post_json ? "POST" : "GET",
+                       .body = post_json.value_or(""),
+                       .content_type = post_json ? "application/json" : "",
                        .timeout = timeout});
-  }
-
-  std::string call(const std::string &path, std::optional<std::string> post_json = std::nullopt) const {
-    return fetch(path, std::move(post_json)).body;
   }
 
   ImmichSettings settings_;
