@@ -131,7 +131,11 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
 - **Zegar.** Wysoki i cienki krój do wyboru na ekranie przez `?fonts`. Kandydaci są w `clockFont.svelte.ts`, a po wyborze zbędne paczki znikną.
 - **Światła.** Na razie to makieta.
   - Lampka lewa i prawa: tylko włącz/wyłącz.
-  - Listwa LED to RGBW: jasność, kanał bieli, barwa i gotowe ustawienia.
+  - Listwa LED to RGBW, z panelem w stylu Apple Home (od 23.11.2026):
+    - dwie wysokie pigułki: „Jasność” w kolorze listwy (sama jest podglądem światła) i „Biel”;
+    - osiem dużych próbek kolorów oraz pasek dowolnego odcienia;
+    - poświata w kolorze listwy w tle panelu, gdy świeci.
+    Zmiana wartości sama włącza listwę. Wcześniejszy układ (suwaki w rzędach z etykietami) wyglądał jak formularz ustawień i odstawał od reszty.
 - **Kalendarz.**
   - Tryby Dzień / Tydzień / Miesiąc, przewijanie strzałkami i „Dziś”.
   - Trzy źródła: Prywatny, M4T i Itens, każde w swoim kolorze. Chipy pod tytułem włączają i wyłączają źródła, a filtr działa też na widżecie podsumowania.

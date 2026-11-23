@@ -1,12 +1,16 @@
-<!-- Home control: the two desk lamps (on/off only) and the RGBW LED strip with brightness,
-     white channel and colour. A mock until the hardware exists. -->
+<!-- Home control: the two desk lamps (on/off only) and the RGBW LED strip, in the manner of
+     Apple Home: two tall pills for brightness (filled in the strip's colour, so it shows the
+     light) and the white channel, large colour swatches and a hue strip for any other colour.
+     Changing a value switches the strip on. A soft glow in its colour fills the panel while
+     it shines. A mock until the hardware exists. -->
 <script lang="ts">
+  import Lamp from '@lucide/svelte/icons/lamp';
   import LampDesk from '@lucide/svelte/icons/lamp-desk';
-  import Palette from '@lucide/svelte/icons/palette';
+  import Sparkles from '@lucide/svelte/icons/sparkles';
   import Sun from '@lucide/svelte/icons/sun';
-  import SunDim from '@lucide/svelte/icons/sun-dim';
   import { HUE_TRACK, hexToHue, hueToHex, LED_PRESETS } from '../color';
   import PageFrame from '../components/PageFrame.svelte';
+  import PillSlider from '../components/PillSlider.svelte';
   import Slider from '../components/Slider.svelte';
   import Toggle from '../components/Toggle.svelte';
   import { dash, setLight } from '../state.svelte';
@@ -32,50 +36,64 @@
     </div>
 
     {#if strip}
-      <section class="strip" class:on={strip.on} style:--led={strip.color ?? '#ffffff'}>
+      {@const led = strip.color ?? '#ffffff'}
+      <section class="strip" class:on={strip.on} style:--led={led}>
+        <i class="ambient" style:opacity={strip.on ? 0.35 + ((strip.brightness ?? 0) / 100) * 0.65 : 0}></i>
         <header>
-          <div>
+          <span class="badge"><Sparkles size={26} strokeWidth={1.8} /></span>
+          <div class="title">
             <div class="name">{strip.name}</div>
-            <div class="state num">{strip.on ? `RGBW · ${strip.brightness ?? 0}%` : 'Wyłączona'}</div>
+            <div class="state num">{strip.on ? `Włączona · ${strip.brightness ?? 0}%` : 'Wyłączona'}</div>
           </div>
           <Toggle on={strip.on} label={strip.name} onchange={(on) => setLight(strip.id, { on })} />
         </header>
 
-        <div class="preview" style:opacity={strip.on ? 0.35 + ((strip.brightness ?? 0) / 100) * 0.65 : 0.12}>
-          <i class="bar"></i>
-        </div>
-
-        <div class="controls" class:disabled={!strip.on}>
-          <div class="row">
-            <span class="label"><SunDim size={17} /> Jasność</span>
-            <Slider value={strip.brightness ?? 0} icon={Sun} label="Jasność" onchange={(brightness) => setLight(strip.id, { on: true, brightness })} />
-          </div>
-          <div class="row">
-            <span class="label"><Sun size={17} /> Biel</span>
-            <Slider value={strip.white ?? 0} label="Biel" onchange={(white) => setLight(strip.id, { on: true, white })} />
-          </div>
-          <div class="row">
-            <span class="label"><Palette size={17} /> Kolor</span>
-            <Slider
-              value={hexToHue(strip.color ?? '#ff0000')}
-              max={359}
-              track={HUE_TRACK}
-              label="Kolor"
-              onchange={(hue) => setLight(strip.id, { on: true, color: hueToHex(hue) })}
+        <div class="body">
+          <div class="pills">
+            <PillSlider
+              label="Jasność"
+              icon={Sun}
+              value={strip.brightness ?? 0}
+              fill="linear-gradient(to top, color-mix(in srgb, {led} 55%, #000), {led})"
+              dim={!strip.on}
+              onchange={(brightness) => setLight(strip.id, { on: true, brightness })}
+            />
+            <PillSlider
+              label="Biel"
+              icon={Lamp}
+              value={strip.white ?? 0}
+              fill="linear-gradient(to top, #f4b56a, #fff3dc)"
+              dim={!strip.on}
+              onchange={(white) => setLight(strip.id, { on: true, white })}
             />
           </div>
-          <div class="presets">
-            {#each LED_PRESETS as [name, color, white] (name)}
-              <button
-                class="preset"
-                class:active={strip.color === color && strip.white === white}
-                style:--c={color}
-                onclick={() => setLight(strip.id, { on: true, color, white })}
-              >
-                <i></i>
-                <span>{name}</span>
-              </button>
-            {/each}
+
+          <div class="colors">
+            <div class="label">Kolor</div>
+            <div class="swatches">
+              {#each LED_PRESETS as [name, color, white] (name)}
+                <button
+                  class="swatch"
+                  class:active={strip.color === color && strip.white === white}
+                  style:--c={color}
+                  onclick={() => setLight(strip.id, { on: true, color, white })}
+                >
+                  <i></i>
+                  <span>{name}</span>
+                </button>
+              {/each}
+            </div>
+            <div class="label">Dowolny odcień</div>
+            <div class="hue">
+              <Slider
+                value={hexToHue(led)}
+                max={359}
+                track={HUE_TRACK}
+                height={42}
+                label="Odcień"
+                onchange={(hue) => setLight(strip.id, { on: true, color: hueToHex(hue) })}
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -164,108 +182,132 @@
   }
 
   .strip {
+    position: relative;
     display: flex;
     flex-direction: column;
-    padding: 24px 28px;
+    padding: 24px 28px 26px;
     border-radius: var(--radius);
     background: var(--card);
     box-shadow: var(--shadow);
+    overflow: hidden;
   }
 
-  .strip header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .preview {
-    position: relative;
-    margin: 20px 0 22px;
-    transition: opacity 0.3s ease;
-  }
-
-  /* The glow around the bar: a gradient, cheap to paint (a blurred shadow is not, and this
-     one repaints while a slider moves). */
-  .preview::before {
-    content: '';
+  /* The strip's light falling on the panel; a gradient, cheap to paint. */
+  .ambient {
     position: absolute;
-    inset: -20px -6px;
-    border-radius: 30px;
-    background: linear-gradient(transparent, color-mix(in srgb, var(--led) 55%, transparent) 50%, transparent);
+    inset: 0;
+    background: radial-gradient(70% 80% at 12% 85%, color-mix(in srgb, var(--led) 26%, transparent), transparent 70%);
+    transition: opacity 0.4s ease;
+    pointer-events: none;
   }
 
-  .bar {
+  header {
     position: relative;
-    display: block;
-    height: 14px;
-    border-radius: 7px;
-    background: var(--led);
-  }
-
-  .controls {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    transition: opacity 0.3s ease;
-  }
-
-  .controls.disabled {
-    opacity: 0.45;
-  }
-
-  .row {
     display: flex;
     align-items: center;
     gap: 16px;
   }
 
-  .label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 104px;
-    flex: none;
-    font-size: 15px;
-    font-weight: 560;
-    color: var(--muted);
-  }
-
-  .presets {
+  .badge {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 8px;
-    margin-top: 6px;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    color: var(--muted);
+    background: var(--fill);
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
   }
 
-  .preset {
+  .strip.on .badge {
+    color: #fff;
+    background: var(--led);
+  }
+
+  .title {
+    flex: 1;
+  }
+
+  .body {
+    position: relative;
+    display: flex;
+    flex: 1;
+    gap: 44px;
+    min-height: 0;
+    margin-top: 22px;
+  }
+
+  .pills {
+    display: flex;
+    gap: 20px;
+  }
+
+  .colors {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .label {
+    margin-bottom: 14px;
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .swatches {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px 8px;
+    margin-bottom: 30px;
+  }
+
+  .swatch {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 8px 0;
-    border-radius: 14px;
+    gap: 8px;
   }
 
-  .preset i {
-    width: 40px;
-    height: 40px;
+  .swatch i {
+    width: 66px;
+    height: 66px;
     border-radius: 50%;
     background: var(--c);
+    box-shadow: 0 0 0 1px var(--line);
+    transition: box-shadow 0.2s ease;
   }
 
-  .preset span {
-    font-size: 11.5px;
+  .swatch.active i {
+    box-shadow:
+      0 0 0 4px var(--card-solid),
+      0 0 0 7px var(--c);
+  }
+
+  .swatch:active i {
+    transform: scale(0.92);
+  }
+
+  /* A row, so the slider keeps its own height instead of filling the column. */
+  .hue {
+    display: flex;
+    padding: 0 4px;
+  }
+
+  .swatch span {
+    font-size: 13px;
     color: var(--muted);
     white-space: nowrap;
   }
 
-  .preset.active {
-    background: var(--fill);
-  }
-
-  .preset.active i {
-    box-shadow:
-      0 0 0 3px var(--card-solid),
-      0 0 0 5px var(--c);
+  .swatch.active span {
+    color: var(--text);
+    font-weight: 600;
   }
 </style>
