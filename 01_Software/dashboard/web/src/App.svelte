@@ -32,7 +32,8 @@
   </div>
   <Screensaver bind:covered />
 
-  {#if connection.mode === 'mock'}
+  <!-- ?demo: test data without this badge, for screenshots (README). -->
+  {#if connection.mode === 'mock' && !new URLSearchParams(location.search).has('demo')}
     <div class="status"><FlaskConical size={13} /> dane testowe</div>
   {:else if connection.mode === 'offline'}
     <div class="status warn"><WifiOff size={13} /> brak połączenia z serwerem</div>

@@ -49,8 +49,8 @@ function days(): WeatherDay[] {
 
 export const MOCK_CALENDARS: CalendarSource[] = [
   { id: 'private', name: 'Prywatny', color: '#ff9f0a' },
-  { id: 'm4t', name: 'M4T', color: '#0a84ff' },
-  { id: 'itens', name: 'Itens', color: '#bf5af2' },
+  { id: 'work', name: 'Praca', color: '#0a84ff' },
+  { id: 'client', name: 'Klient', color: '#bf5af2' },
 ];
 
 /** A plausible six weeks around today: work meetings on weekdays, private things in the
@@ -89,19 +89,19 @@ function events(): CalendarEvent[] {
     const wd = day.getDay(); // 0 = Sunday
     const week = Math.floor(i / 7);
     if (wd >= 1 && wd <= 5) {
-      add('m4t', 'Daily zespołu', at(day, 9, 30), 15);
+      add('work', 'Daily zespołu', at(day, 9, 30), 15);
       if (wd === 1) {
-        add('m4t', 'Planowanie sprintu', at(day, 10, 0), 90, {
+        add('work', 'Planowanie sprintu', at(day, 10, 0), 90, {
           location: 'Sala Wisła',
           description:
             'Cel sprintu i podział zadań.\n\nPrzed spotkaniem przejrzyj tablicę i oszacuj swoje zgłoszenia. ' +
             'Zabierz listę ryzyk z poprzedniego sprintu.',
         });
       }
-      if (wd === 3) add('m4t', 'Przegląd architektury', at(day, 13, 0), 60);
-      if (wd === 5 && week % 2 === 0) add('m4t', 'Retrospektywa', at(day, 14, 0), 60);
-      if (wd === 2 || wd === 4) add('itens', 'Spotkanie z klientem', at(day, 15, 0), 60, { location: 'Teams' });
-      if (wd === 4 && week % 2 === 1) add('itens', 'Warsztat produktowy', at(day, 11, 0), 120);
+      if (wd === 3) add('work', 'Przegląd architektury', at(day, 13, 0), 60);
+      if (wd === 5 && week % 2 === 0) add('work', 'Retrospektywa', at(day, 14, 0), 60);
+      if (wd === 2 || wd === 4) add('client', 'Spotkanie z klientem', at(day, 15, 0), 60, { location: 'Teams' });
+      if (wd === 4 && week % 2 === 1) add('client', 'Warsztat produktowy', at(day, 11, 0), 120);
     }
     if (wd === 1 || wd === 3 || wd === 5) add('private', 'Siłownia', at(day, 18, 0), 90, { location: 'Calypso' });
     if (wd === 6 && week % 2 === 0) add('private', 'Rower', at(day, 10, 0), 180);
@@ -129,11 +129,11 @@ function events(): CalendarEvent[] {
     add(calendarId, title, start, 0, { end: iso(end), allDay: true });
   };
   allDay('private', 'Urlop w górach', 1, 3);
-  allDay('m4t', 'Dzień bez spotkań', 2, 1);
-  allDay('itens', 'Wdrożenie u klienta', 2, 1);
+  allDay('work', 'Dzień bez spotkań', 2, 1);
+  allDay('client', 'Wdrożenie u klienta', 2, 1);
 
   // Relative to now, so the summary always has something running and something next.
-  add('itens', 'Konsultacje', new Date(now.getTime() - 20 * 60_000), 60);
+  add('client', 'Konsultacje', new Date(now.getTime() - 20 * 60_000), 60);
   add('private', 'Odbiór paczki', new Date(now.getTime() + 85 * 60_000), 30);
   return list;
 }

@@ -83,7 +83,8 @@ function useMock(): void {
 const RETRY_MS = 2000;
 
 export async function connect(): Promise<void> {
-  if (new URLSearchParams(location.search).has('mock')) {
+  const params = new URLSearchParams(location.search);
+  if (params.has('mock') || params.has('demo')) {
     useMock();
     return;
   }
@@ -177,7 +178,7 @@ export async function fetchDevices(): Promise<SpotifyDevice[]> {
   if (connection.mode === 'mock') {
     return [
       { id: 'mock-speaker', name: 'Głośnik w salonie', type: 'Speaker', isActive: true, volume: 45 },
-      { id: 'mock-pc', name: 'fedora', type: 'Computer', isActive: false, volume: 80 },
+      { id: 'mock-pc', name: 'Komputer', type: 'Computer', isActive: false, volume: 80 },
       { id: 'mock-phone', name: 'iPhone', type: 'Smartphone', isActive: false, volume: 100 },
     ];
   }

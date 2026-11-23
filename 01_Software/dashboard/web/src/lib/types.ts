@@ -50,7 +50,7 @@ export interface Weather {
   days: WeatherDay[]; // the next days, starting tomorrow
 }
 
-/** One calendar source (an account), e.g. private, M4T, Itens. */
+/** One calendar source (an account), e.g. private, work, a client. */
 export interface CalendarSource {
   id: string;
   name: string;
