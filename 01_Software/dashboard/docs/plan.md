@@ -74,11 +74,16 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
 
   - Widżet na podsumowaniu otwiera swój pulpit.
   - Na podsumowaniu jest: zegar, data, pogoda w jednej linii, trzy światła jak w Centrum sterowania, kalendarz w stylu „Up Next”, wspomnienie z Immicha, muzyka i drukarka.
+  - Kafelek kalendarza (od 23.11.2026) nie powtarza daty, którą pokazuje już zegar obok.
+    - Pokazuje 5 najbliższych wydarzeń z widocznych kalendarzy, rozłożonych na całą wysokość.
+    - Każde ma godzinę z dniem („dziś”, „jutro”, „śr.”, „2 gru”), pasek w kolorze kalendarza, tytuł, nazwę kalendarza i miejsce.
+    - Do tego pigułka „trwa”, „za 45 min” albo „za 3 dni”. Pigułki nie ma, gdy powtarzałaby dzień z kolumny.
 - **Przegląd pulpitów.**
   - Otwiera go przeciągnięcie palcem w górę (podpowiada to pasek na dole, jak w iOS) albo dwuklik w puste miejsce. Przeciągnięcie w dół go zamyka.
   - Uszczypnięcie (pierwsza wersja) zastąpiliśmy 22.11.2026 przeciągnięciem, na życzenie użytkownika.
   - Przegląd od razu znikał, bo `click` palca, który go otworzył, trafiał w kafelek, który właśnie się pojawił. Gest połyka teraz ten `click`, a kafelki ignorują stuknięcia przez 400 ms po otwarciu.
   - Pokazuje kafelki jak przełącznik aplikacji: ikona w kolorze pulpitu, nazwa i jedna bieżąca informacja. Kafelek zdjęć ma w tle wspomnienie z Immicha.
+  - Od 23.11.2026 podsumowanie stoi w środku jako duży kafelek z zegarem, datą i pogodą. Strony leżące w pagerze na lewo od niego (Dom, Drukarka, Kalendarz) są kolumną z lewej, a te na prawo (Pogoda, Muzyka, Zdjęcia) kolumną z prawej, w kolejności przesuwania.
   - Bieżący pulpit odpływa w tle jedną, już narysowaną warstwą.
   - Pierwsza wersja z 7 żywymi, pomniejszonymi stronami zacinała Pi przy otwieraniu i zamykaniu, bo WebKit musiał naraz przemalować wszystkie strony, do tego z maskami zaokrągleń i dużymi cieniami.
   - Po wyborze kafelka tor stron przeskakuje od razu, bez przewijania przez strony pośrednie, więc rysuje się tylko strona docelowa.

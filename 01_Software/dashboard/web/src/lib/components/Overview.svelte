@@ -1,5 +1,8 @@
 <!--
-  Overview of the pages as light tiles (icon, name, one live line), like an app switcher.
+  Overview of the pages as light tiles (icon, name, one live line), like an app switcher. The
+  summary sits in the middle as a large tile with the clock; the pages left of it in the pager
+  (home, printer, calendar) stand in a column on its left, those right of it on its right, in
+  the order a swipe goes through them.
   Cheap on purpose: a few small elements fading and scaling in, instead of seven live pages,
   which the Pi cannot paint at once without a stutter. It stays in the page all the time and
   only CSS transitions show it, so opening it creates no elements. A tap opens the page; a swipe down or
@@ -9,7 +12,8 @@
 <script lang="ts">
   import { visibleEvents } from '../calendarView.svelte';
   import { clock } from '../clock.svelte';
-  import { hhmm, temp, weatherLook } from '../format';
+  import { clockStyle } from '../clockFont.svelte';
+  import { hhmm, longDate, temp, weatherLook } from '../format';
   import { go, nav, PAGES, type PageId } from '../nav.svelte';
   import { PRINTER_STATE, remaining } from '../printer';
   import { dash } from '../state.svelte';
@@ -83,7 +87,9 @@
     {#each PAGES as page, i (page.id)}
       <button
         class="tile"
+        class:center={page.id === 'summary'}
         class:current={i === nav.index}
+        style:grid-area={page.id}
         class:photo={page.id === 'photos' && memory}
         style:--c={COLOR[page.id]}
         style:--i={i}
@@ -94,11 +100,27 @@
           <img src={memory} alt="" />
           <i class="scrim"></i>
         {/if}
-        <span class="icon"><page.icon size={26} strokeWidth={2} /></span>
-        <span class="text">
-          <span class="title">{page.title}</span>
-          <span class="info">{info(page.id)}</span>
-        </span>
+        {#if page.id === 'summary'}
+          <span class="top">
+            <span class="icon"><page.icon size={26} strokeWidth={2} /></span>
+            <span class="title">{page.title}</span>
+          </span>
+          <span class="hero">
+            <span class="clock num" style={clockStyle(128)}>{hhmm(clock.now)}</span>
+            <span class="date">{longDate(clock.now)}</span>
+            {#if dash.weather}
+              <span class="info">
+                {temp(dash.weather.now.temp)} · {weatherLook(dash.weather.now.code, dash.weather.now.isDay).label}
+              </span>
+            {/if}
+          </span>
+        {:else}
+          <span class="icon"><page.icon size={26} strokeWidth={2} /></span>
+          <span class="text">
+            <span class="title">{page.title}</span>
+            <span class="info">{info(page.id)}</span>
+          </span>
+        {/if}
       </button>
     {/each}
   </div>
@@ -151,10 +173,15 @@
   }
 
   .tiles {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 290px 390px 290px;
+    grid-template-rows: repeat(3, 156px);
+    grid-template-areas:
+      'home summary weather'
+      'printer summary music'
+      'calendar summary photos';
     justify-content: center;
-    gap: 22px;
+    gap: 20px 24px;
   }
 
   .tile {
@@ -162,8 +189,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    width: 255px;
-    height: 176px;
+    min-width: 0;
     padding: 20px 20px 18px;
     border-radius: 28px;
     background: var(--card);
@@ -172,6 +198,32 @@
     overflow: hidden;
     transform: scale(0.92);
     transition: transform 0.32s var(--ease);
+  }
+
+  .tile.center {
+    padding: 24px 26px 26px;
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .hero {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .hero .clock {
+    line-height: 0.9;
+    margin: 0 0 10px -4px;
+  }
+
+  .hero .date {
+    font-size: 19px;
+    font-weight: 600;
   }
 
   .open .tile {

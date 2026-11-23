@@ -1,6 +1,9 @@
-<!-- Calendar widget in the style of Apple's "Up Next": weekday and day number on the left,
-     the next events on the right. A tap opens the calendar page. -->
+<!-- Calendar on the summary, in the manner of Apple's "Up Next": the next five events from now
+     on, each with its time, its day when not today, the calendar it comes from and how soon it
+     starts. The date itself is left to the clock beside it. Respects the calendar filter of the
+     calendar page. A tap opens the calendar page. -->
 <script lang="ts">
+  import CalendarDays from '@lucide/svelte/icons/calendar-days';
   import { visibleEvents } from '../../calendarView.svelte';
   import { clock } from '../../clock.svelte';
   import { hhmm, startsIn } from '../../format';
@@ -8,133 +11,194 @@
   import type { CalendarEvent } from '../../types';
   import Widget from '../Widget.svelte';
 
-  const MAX = 4;
-  const weekday = new Intl.DateTimeFormat('pl-PL', { weekday: 'long' });
+  const MAX = 5;
+  const DAY_MS = 86_400_000;
+  const weekdayFmt = new Intl.DateTimeFormat('pl-PL', { weekday: 'short' });
+  const dateFmt = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short' });
 
   const upcoming = $derived.by((): CalendarEvent[] => {
     const now = clock.now;
-    const end = new Date(now);
-    end.setHours(0, 0, 0, 0);
-    end.setDate(end.getDate() + 2); // today and tomorrow
     return visibleEvents()
-      .filter((e) => !e.allDay && new Date(e.end) > now && new Date(e.start) < end)
-      .sort((a, b) => a.start.localeCompare(b.start))
+      .filter((e) => new Date(e.end) > now)
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
       .slice(0, MAX);
   });
 
+  /** Whole days from today to the event's day (0 today, 1 tomorrow, ...). */
+  function daysAway(e: CalendarEvent): number {
+    const day = new Date(e.start).setHours(0, 0, 0, 0);
+    const today = new Date(clock.now).setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((day - today) / DAY_MS));
+  }
+
   function dayLabel(e: CalendarEvent): string {
-    const d = new Date(e.start);
-    return d.toDateString() === clock.now.toDateString() ? '' : 'jutro ';
+    const days = daysAway(e);
+    if (days === 0) return 'dziś';
+    if (days === 1) return 'jutro';
+    if (days < 7) return weekdayFmt.format(new Date(e.start));
+    return dateFmt.format(new Date(e.start));
+  }
+
+  /** How soon, unless the day column already says it ("jutro" twice reads badly). */
+  function relative(e: CalendarEvent): { text: string; kind: 'running' | 'soon' | 'later' } | null {
+    const now = clock.now;
+    const start = new Date(e.start);
+    if (start <= now) return { text: 'trwa', kind: 'running' };
+    if (!e.allDay && start.getTime() - now.getTime() < 12 * 3600_000) {
+      return { text: startsIn(start, now), kind: 'soon' };
+    }
+    const days = daysAway(e);
+    return days >= 2 ? { text: `za ${days} dni`, kind: 'later' } : null;
   }
 </script>
 
 <Widget to="calendar" class="events">
-  <div class="layout">
-    <div class="day">
-      <div class="weekday">{weekday.format(clock.now)}</div>
-      <div class="number num">{clock.now.getDate()}</div>
-    </div>
+  <div class="head"><CalendarDays size={16} strokeWidth={2.2} /> Najbliższe</div>
+  {#if dash.events === null}
+    <div class="empty">Łączę z kalendarzem…</div>
+  {:else if upcoming.length === 0}
+    <div class="empty">Nic w kalendarzu</div>
+  {:else}
     <div class="list">
-      {#if dash.events === null}
-        <div class="empty">Łączę z kalendarzem…</div>
-      {:else if upcoming.length === 0}
-        <div class="empty">Dziś i jutro nic więcej</div>
-      {:else}
-        {#each upcoming as e, i (e.id)}
-          {@const running = new Date(e.start) <= clock.now}
-          <div class="event" style:--cal={e.color}>
-            <i class="bar"></i>
-            <div class="text">
-              <div class="title">{e.title}</div>
-              <div class="when num">
-                {dayLabel(e)}{hhmm(e.start)}–{hhmm(e.end)}
-                {#if i === 0}
-                  <span class="soon" class:running>{running ? 'trwa' : startsIn(new Date(e.start), clock.now)}</span>
-                {/if}
-              </div>
+      {#each upcoming as e (e.id)}
+        {@const rel = relative(e)}
+        <div class="row" style:--cal={e.color}>
+          <div class="time num">
+            {#if e.allDay}
+              <b>{dayLabel(e)}</b>
+              <span>cały dzień</span>
+            {:else}
+              <b>{hhmm(e.start)}</b>
+              <span>{dayLabel(e)}</span>
+            {/if}
+          </div>
+          <i class="bar"></i>
+          <div class="text">
+            <div class="title">{e.title}</div>
+            <div class="sub">
+              <span class="tag">{e.calendar}</span>
+              {#if e.location}<span class="place">{e.location}</span>{/if}
             </div>
           </div>
-        {/each}
-      {/if}
+          {#if rel}<span class="rel num {rel.kind}">{rel.text}</span>{/if}
+        </div>
+      {/each}
     </div>
-  </div>
+  {/if}
 </Widget>
 
 <style>
-  .layout {
+  /* The rows spread over the whole height of the tile. */
+  :global(.widget.events) {
     display: flex;
-    gap: 22px;
-    height: 100%;
+    flex-direction: column;
   }
 
-  .day {
-    width: 108px;
-    flex: none;
-  }
-
-  .weekday {
-    font-size: 15px;
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 14px;
     font-weight: 650;
     color: var(--red);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .number {
-    font-size: 64px;
-    font-weight: 300;
-    line-height: 1;
-    margin-top: 4px;
-    letter-spacing: -0.03em;
   }
 
   .list {
-    flex: 1;
-    min-width: 0;
     display: flex;
+    flex: 1;
     flex-direction: column;
-    gap: 14px;
-    padding-top: 2px;
+    justify-content: space-between;
+    margin-top: 12px;
+    min-height: 0;
   }
 
-  .event {
+  .row {
     display: flex;
+    align-items: center;
     gap: 12px;
+    min-height: 0;
+  }
+
+  .time {
+    display: flex;
+    flex-direction: column;
+    width: 66px;
+    flex: none;
+  }
+
+  .time b {
+    font-size: 16px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .time span {
+    font-size: 12.5px;
+    color: var(--muted);
+    white-space: nowrap;
   }
 
   .bar {
-    width: 4px;
+    align-self: stretch;
+    width: 3px;
     flex: none;
+    margin: 3px 0;
     border-radius: 2px;
     background: var(--cal);
   }
 
   .text {
+    flex: 1;
     min-width: 0;
   }
 
   .title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .when {
+  .sub {
+    display: flex;
+    gap: 8px;
     margin-top: 2px;
-    font-size: 14.5px;
+    font-size: 12.5px;
     color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
   }
 
-  .soon {
-    margin-left: 6px;
+  .tag {
+    flex: none;
+    font-weight: 650;
+    color: var(--cal);
+  }
+
+  .place {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rel {
+    flex: none;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 12.5px;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--muted);
+    background: var(--fill);
   }
 
-  .soon.running {
+  .rel.soon {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .rel.running {
     color: var(--good);
+    background: color-mix(in srgb, var(--good) 16%, transparent);
   }
 
   .empty {
