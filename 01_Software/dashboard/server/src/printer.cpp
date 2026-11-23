@@ -1,6 +1,7 @@
 #include "printer.hpp"
 
 #include <MQTTClient.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <condition_variable>
@@ -112,6 +113,11 @@ void run(std::stop_token stop, Hub &hub, const PrinterSettings &settings) {
   const std::string report_topic = "device/" + settings.serial + "/report";
   const std::string request_topic = "device/" + settings.serial + "/request";
   const std::string pushall = json{{"pushing", {{"sequence_id", "0"}, {"command", "pushall"}}}}.dump();
+  // The broker drops the older of two connections with the same client ID: the server on the
+  // Pi and one on the PC must not share it, or they keep throwing each other out.
+  char host[64] = {};
+  gethostname(host, sizeof host - 1);
+  const std::string client_id = std::string("out-of-fun-dashboard-") + host;
 
   json shown = nullptr; // what the page has
   auto last_publish = std::chrono::steady_clock::now();
@@ -120,7 +126,7 @@ void run(std::stop_token stop, Hub &hub, const PrinterSettings &settings) {
 
   while (!stop.stop_requested()) {
     MQTTClient raw = nullptr;
-    if (MQTTClient_create(&raw, uri.c_str(), "out-of-fun-dashboard", MQTTCLIENT_PERSISTENCE_NONE, nullptr) !=
+    if (MQTTClient_create(&raw, uri.c_str(), client_id.c_str(), MQTTCLIENT_PERSISTENCE_NONE, nullptr) !=
         MQTTCLIENT_SUCCESS) {
       log_error("printer: cannot create the MQTT client for {}", uri);
       return;
