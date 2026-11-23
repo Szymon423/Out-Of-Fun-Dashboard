@@ -30,16 +30,24 @@
           <div class="info">
             <div class="name">{p.job.name}</div>
             <div class="facts num">
-              <span><Timer size={18} /> {remaining(p.job.remainingMin)} · koniec o {finishesAt(p.job.remainingMin)}</span>
+              {#if p.state === 'printing' || p.state === 'paused'}
+                <span><Timer size={18} /> {remaining(p.job.remainingMin)} · koniec o {finishesAt(p.job.remainingMin)}</span>
+              {/if}
               <span><Layers size={18} /> warstwa {p.job.layer} z {p.job.totalLayers}</span>
             </div>
           </div>
         {/if}
+        {#if p.message}<div class="message">{p.message}</div>{/if}
       </section>
 
       <div class="side">
         <section class="card temps num">
-          <div class="temp"><Flame size={20} /><span>Dysza</span><b>{Math.round(p.nozzle.temp)}°</b><small>/ {p.nozzle.target}°</small></div>
+          {#each p.nozzles as nozzle, i (i)}
+            <div class="temp">
+              <Flame size={20} /><span>{p.nozzles.length > 1 ? `Dysza ${i + 1}` : 'Dysza'}</span>
+              <b>{Math.round(nozzle.temp)}°</b><small>/ {nozzle.target}°</small>
+            </div>
+          {/each}
           <div class="temp"><Heater size={20} /><span>Stół</span><b>{Math.round(p.bed.temp)}°</b><small>/ {p.bed.target}°</small></div>
           {#if p.chamber !== null}
             <div class="temp"><ThermometerSun size={20} /><span>Komora</span><b>{Math.round(p.chamber)}°</b></div>
@@ -47,12 +55,15 @@
         </section>
 
         <section class="card ams">
-          <div class="title"><Box size={16} /> AMS</div>
+          <div class="title">
+            <Box size={16} /> AMS
+            {#if p.amsHumidity !== null}<span class="humidity num">wilgotność {p.amsHumidity}%</span>{/if}
+          </div>
           <div class="trays">
             {#each p.ams as tray, i (i)}
-              <div class="tray" class:active={tray.active}>
-                <span class="spool" style:background={tray.color}></span>
-                <span class="mat">{tray.material}</span>
+              <div class="tray" class:active={tray.active} class:none={tray.color === null}>
+                <span class="spool" style:background={tray.color ?? 'transparent'}></span>
+                <span class="mat">{tray.material || 'Pusty'}</span>
                 <span class="left num">{tray.remaining === null ? '—' : `${tray.remaining}%`}</span>
               </div>
             {/each}
@@ -219,6 +230,31 @@
     box-shadow:
       0 0 0 4px var(--fill-strong),
       0 4px 10px rgba(0, 0, 0, 0.25) inset;
+  }
+
+  .message {
+    margin-top: 14px;
+    font-size: 15px;
+    font-weight: 560;
+    color: var(--bad);
+  }
+
+  .humidity {
+    margin-left: auto;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  /* An empty slot: a dashed ring instead of a spool. */
+  .tray.none .spool {
+    box-shadow: none;
+    outline: 2px dashed var(--fill-strong);
+    outline-offset: -2px;
+  }
+
+  .tray.none .mat {
+    color: var(--faint);
+    font-weight: 500;
   }
 
   .mat {

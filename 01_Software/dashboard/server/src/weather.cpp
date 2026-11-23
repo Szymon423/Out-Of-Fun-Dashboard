@@ -19,7 +19,7 @@ namespace {
 constexpr std::size_t kHours = 24;
 constexpr std::size_t kDays = 7;
 constexpr auto kRefresh = 15min;
-constexpr auto kFirstRetry = 1min;
+constexpr auto kFirstRetry = 5s; // then twice as long each time; at boot the network is a second behind
 
 double num(const json &j) { return j.is_number() ? j.get<double>() : 0.0; }
 int whole(const json &j) { return j.is_number() ? static_cast<int>(std::lround(j.get<double>())) : 0; }

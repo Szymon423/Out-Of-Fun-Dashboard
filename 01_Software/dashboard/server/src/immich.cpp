@@ -22,7 +22,7 @@ namespace {
 constexpr int kAsk = 100;     // random assets asked for; portraits and the like drop out
 constexpr int kBatch = 30;    // photos in one batch: 10 min of screensaver at 20 s each
 constexpr auto kRefresh = 30min;
-constexpr auto kFirstRetry = 1min;
+constexpr auto kFirstRetry = 5s; // then twice as long each time; at boot the network is a second behind
 constexpr const char *kAlbum = "Wszystkie zdjęcia";
 
 std::string text(const json &object, const char *key) {

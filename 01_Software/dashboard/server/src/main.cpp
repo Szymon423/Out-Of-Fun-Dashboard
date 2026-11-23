@@ -17,6 +17,7 @@
 #include "lights.hpp"
 #include "log.hpp"
 #include "immich.hpp"
+#include "printer.hpp"
 #include "spotify.hpp"
 #include "systemd.hpp"
 #include "weather.hpp"
@@ -133,6 +134,13 @@ int main(int argc, char **argv) {
     log_info("spotify: no spotify.clientId in {}/config.json, no music", options.data.string());
   }
 
+  std::optional<PrinterProvider> printer;
+  if (config.printer) {
+    printer.emplace(hub, *config.printer);
+  } else {
+    log_info("printer: no printer in {}/config.json", options.data.string());
+  }
+
   HttpServer http(hub, lights, display, spotify ? &*spotify : nullptr, options.web, photos_dir);
   if (!http.bind(options.host, options.port)) {
     log_error("cannot listen on {}:{}: {}", options.host, options.port, std::strerror(errno));
@@ -157,6 +165,7 @@ int main(int argc, char **argv) {
   if (!stopping.exchange(true)) pthread_kill(signals.native_handle(), SIGTERM); // wake it to end
   signals.join();
 
+  printer.reset();
   spotify.reset();
   photos.reset();
   weather.reset();

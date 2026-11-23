@@ -12,6 +12,13 @@ project(
 curl = dependency('libcurl')
 json = dependency('nlohmann_json')
 threads = dependency('threads')
+# Eclipse Paho MQTT C, the synchronous client with TLS: the Bambu printer (printer.hpp).
+# Neither Fedora's nor Yocto's build ships a pkg-config file for it.
+cpp = meson.get_compiler('cpp')
+paho = declare_dependency(dependencies: cpp.find_library('paho-mqtt3cs'))
+if not cpp.has_header('MQTTClient.h')
+  error('MQTTClient.h not found: install paho-c-devel (Fedora) or add paho-mqtt-c to DEPENDS (Yocto)')
+endif
 
 # One header, kept in the tree (third_party/cpp-httplib/README.md). Included only by
 # http_api.cpp, because it takes a while to compile.
@@ -28,13 +35,14 @@ core = static_library(
   'src/immich.cpp',
   'src/lights.cpp',
   'src/log.cpp',
+  'src/printer.cpp',
   'src/spotify.cpp',
   'src/weather.cpp',
-  dependencies: [curl, json, threads],
+  dependencies: [curl, json, threads, paho],
 )
 core_dep = declare_dependency(
   link_with: core,
-  dependencies: [curl, json, threads],
+  dependencies: [curl, json, threads, paho],
   include_directories: include_directories('src'),
 )
 
@@ -60,6 +68,10 @@ test(
 test(
   'spotify',
   executable('spotify-test', 'tests/spotify_test.cpp', dependencies: core_dep, build_by_default: false),
+)
+test(
+  'printer',
+  executable('printer-test', 'tests/printer_test.cpp', dependencies: core_dep, build_by_default: false),
 )
 test(
   'hub',

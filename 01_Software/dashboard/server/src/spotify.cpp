@@ -228,7 +228,10 @@ Spotify::Result Spotify::command(std::string_view action) {
 void Spotify::run(std::stop_token stop) {
   json shown = nullptr;
   hub_.publish("music", shown);
-  std::chrono::milliseconds retry = 30s;
+  // At boot the network comes up about a second after the server: retry soon at first.
+  constexpr std::chrono::milliseconds kFirstRetry = 5s;
+  std::chrono::milliseconds retry = kFirstRetry;
+  bool failing = false; // log the recovery after a failure
 
   while (!stop.stop_requested()) {
     std::chrono::milliseconds next = kIdlePoll;
@@ -249,12 +252,14 @@ void Spotify::run(std::stop_token stop) {
                                  ? json(nullptr)
                                  : now_playing(json::parse(response.body), now_ms());
         if (worth_publishing(shown, playing)) hub_.publish("music", shown = playing);
+        if (failing) log_info("spotify: reading the player again");
+        failing = false;
         if (playing.is_object() && playing["isPlaying"].get<bool>()) {
           // Also look right after the track should end, to catch the next one at once.
           const auto left = std::chrono::milliseconds(integer(playing, "durationMs") - integer(playing, "progressMs"));
           next = std::clamp<std::chrono::milliseconds>(left + 1s, 1s, kPlayingPoll);
         }
-        retry = 30s;
+        retry = kFirstRetry;
       }
     } catch (const FetchError &e) {
       if (e.status == 401) {
@@ -267,7 +272,9 @@ void Spotify::run(std::stop_token stop) {
       } else {
         next = retry;
         retry = std::min<std::chrono::milliseconds>(retry * 2, 5min);
-        log_warning("spotify: reading the player failed: {}", e.what());
+        log_warning("spotify: reading the player failed, retrying in {} s: {}",
+                    std::chrono::duration_cast<std::chrono::seconds>(next).count(), e.what());
+        failing = true;
       }
     } catch (const std::exception &e) {
       next = retry;

@@ -92,22 +92,28 @@ export interface PrinterJob {
 }
 
 export interface AmsTray {
-  color: string; // CSS colour of the filament
-  material: string; // PLA, PETG, ...
+  color: string | null; // CSS colour of the filament; null for an empty slot
+  material: string; // PLA, PETG, ...; empty for an empty slot
   remaining: number | null; // %, null when the AMS cannot tell
   active: boolean;
 }
 
 /** Bambu Lab printer, read over MQTT by the server. */
+export interface Temperature {
+  temp: number; // °C, whole degrees
+  target: number; // 0 when not heating
+}
+
 export interface Printer {
   name: string;
-  model: string;
+  model: string; // e.g. X2D
   state: 'offline' | 'idle' | 'printing' | 'paused' | 'finished' | 'error';
   job: PrinterJob | null;
-  nozzle: { temp: number; target: number };
-  bed: { temp: number; target: number };
+  nozzles: Temperature[]; // one per extruder; the X2D has two
+  bed: Temperature;
   chamber: number | null;
   ams: AmsTray[];
+  amsHumidity: number | null; // %, of the first AMS unit
   message: string | null; // error or attention text from the printer
 }
 

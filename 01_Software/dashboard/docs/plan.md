@@ -35,13 +35,14 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
     {
       "location": { "name": "Kraków" },
       "immich": { "url": "http://192.168.1.20:2283", "apiKey": "…" },
-      "spotify": { "clientId": "…" }
+      "spotify": { "clientId": "…" },
+      "printer": { "host": "192.168.1.181", "serial": "…", "accessCode": "…", "model": "X2D" }
     }
     ```
 
     Plik zawiera klucz API, więc leży tylko w `/data/dashboard` na Pi i w `devdata/` na PC, oba poza gitem. Sama nazwa wystarcza, bo serwer szuka współrzędnych w geokoderze Open-Meteo. Można też podać `latitude` i `longitude`, wtedy nazwa jest tylko wyświetlana. Bez miejscowości nie ma pogody.
   - Zepsuty `config.json` nie zatrzymuje serwera: działa dalej bez tej części. Gdyby się zatrzymywał, health check odrzuciłby aktualizację, a poprzedni slot czyta ten sam `/data`.
-  - Pogoda: Open-Meteo co 15 min. Po błędzie ponawia po 1 min, potem co dwa razy dłużej, maksymalnie co 15 min.
+  - Pogoda: Open-Meteo co 15 min. Po błędzie ponawia po 5 s, potem co dwa razy dłużej, maksymalnie co 15 min. Zdjęcia i Spotify robią tak samo. Przy starcie sieć wstaje około sekundę po serwerze (pomiar z 23.11.2026: serwer w 6,3 s, adres DHCP w 7,2 s), a przy ponowieniu po 1 min dashboard przez pierwszą minutę nie miał pogody ani zdjęć.
   - Światła: makieta zapisywana w `lights.json`, więc stan przetrwa restart.
   - Zdjęcia z Immicha (D3):
     - Co 30 min serwer prosi o 100 losowych zdjęć z całej biblioteki. Zostawia do 30 poziomych, od 5:4 do 2,4:1, z uwzględnieniem orientacji EXIF. Odpadają pionowe, panoramy, zarchiwizowane, ukryte i usunięte. Pionowe źle wyglądałyby przycięte do ekranu 16:9.
@@ -107,9 +108,9 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
   - Tryby Dzień / Tydzień / Miesiąc, przewijanie strzałkami i „Dziś”.
   - Trzy źródła: Prywatny, M4T i Itens, każde w swoim kolorze. Chipy pod tytułem włączają i wyłączają źródła, a filtr działa też na widżecie podsumowania.
   - Tryb i filtr są zapamiętane.
-- **Drukarka Bambu Lab.**
-  - Odczyt: stan, postęp, czas do końca, warstwy, temperatury, AMS.
-  - Serwer będzie czytał przez lokalne MQTT drukarki. Najpierw trzeba sprawdzić, na co pozwala obecny firmware.
+- **Drukarka Bambu Lab X2D.**
+  - Odczyt: stan, postęp, czas do końca, warstwy, dwie dysze, stół, komora, AMS z wilgotnością i komunikaty o błędach.
+  - Szczegóły odczytu są w części o serwerze.
 
 Parametry adresu do testów:
 
@@ -171,6 +172,15 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
   - Sterowanie: `PUT /me/player/play|pause`, `POST /me/player/next|previous`. Bez aktywnego urządzenia serwer odpowiada 409, a bez logowania 503.
   - Sterowanie wymaga Spotify Premium.
 
+- **Drukarka (D4b).** X2D, firmware 01.02.00.00. Sprawdzone 23.11.2026:
+  - Ogłasza się w sieci przez SSDP (UDP 2021): model `N6`, tryb chmurowy, „secure link”.
+  - Lokalne MQTT (`ssl://<ip>:8883`, użytkownik `bblp`, hasło to kod dostępu z ekranu drukarki) działa w zwykłym trybie chmurowym. Tryb tylko LAN i tryb deweloperski nie są potrzebne, więc aplikacja Bambu Handy działa dalej.
+  - Serwer subskrybuje `device/<serial>/report` i prosi o pełny stan (`pushall`) przy połączeniu i co 5 min. Częściowe aktualizacje dokleja do całości: obiekty klucz po kluczu, tablice z `id` (AMS, sloty, ekstrudery) element po elemencie. Do drukarki nic poza `pushall` nie wysyła.
+  - X2D ma dwie dysze w `device.extruder.info[]`. Ich temperatura jest zapisana jako `(cel << 16) | bieżąca`; to samo dotyczy `device.ctc` (komora). Na idle'u cel wynosi 0. Rozpakowanie w trakcie grzania trzeba jeszcze potwierdzić na wydruku.
+  - Na ekran trafia zmiana stanu, zadania, AMS lub komunikatu od razu. Same temperatury (w pełnych stopniach) idą najwyżej co 3 s.
+  - Klient MQTT to `paho-mqtt-c` (biblioteka `paho-mqtt3cs`): na PC pakiet `paho-c-devel`, w Yocto przepis z meta-oe. Certyfikat drukarki pochodzi z własnego CA Bambu, więc serwer go nie weryfikuje.
+  - Na później: obraz z kamery (port 6000) i miniaturka wydruku (FTPS, port 990).
+
 ## API (wspólne dla frontendu i serwera)
 
 | Ścieżka | Opis |
@@ -205,6 +215,6 @@ Typy danych są w `web/src/lib/types.ts`. Serwer zwraca dokładnie te pola.
 | D2b | Przepisy Yocto `dashboard-server` i `dashboard-web`, kiosk na `127.0.0.1:8080`, serwer w `dashboard-health` | gotowe 23.11.2026: wersja 0.4 przez OTA, health check przeszedł, pogoda dla Wrocławia, jasność zapisuje się do podświetlenia, serwer zajmuje 14 MB RAM |
 | D3 | Zdjęcia z Immicha: losowe poziome z całej biblioteki, wspomnienia, pamięć podręczna na `/data`, stuknięcia na pulpicie zdjęć, nowy wygaszacz | sprawdzone 23.11.2026 na Pi przez `kiosk-url.sh dev`: zdjęcia, przenikanie i pamięć w porządku; do zrobienia aktualizacja OTA |
 | D4 | Spotify: logowanie raz z PC (`tools/spotify-login.py`), co gra, sterowanie | kod gotowy 23.11.2026; sterowanie z ekranu po zalogowaniu |
-| D4b | Drukarka Bambu Lab przez lokalne MQTT (stan, postęp, temperatury, AMS) | prawdziwy wydruk widoczny na pulpicie |
+| D4b | Drukarka Bambu Lab X2D przez lokalne MQTT (stan, postęp, dwie dysze, AMS) | kod gotowy 23.11.2026, odczyt sprawdzony na PC; do potwierdzenia temperatury przy grzaniu |
 | D5 | Kalendarze Microsoft: device code flow z kodem na ekranie | najpierw sprawdzić, czy polityka służbowego tenanta na to pozwala |
 | D6 | Dopracowanie: noc (ściemnianie podświetlenia), ustawienia, stany błędów i braku sieci | – |

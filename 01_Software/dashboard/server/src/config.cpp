@@ -55,6 +55,16 @@ Config load_config(const std::filesystem::path &data_dir) {
       config.immich = std::move(settings);
     }
   }
+  if (const auto printer = doc.find("printer"); printer != doc.end() && printer->is_object()) {
+    PrinterSettings settings{printer->value("host", ""), printer->value("serial", ""),
+                             printer->value("accessCode", ""), printer->value("name", "Drukarka"),
+                             printer->value("model", "")};
+    if (settings.host.empty() || settings.serial.empty() || settings.access_code.empty()) {
+      log_error("{}: printer needs host, serial and accessCode; no printer", path.string());
+    } else {
+      config.printer = std::move(settings);
+    }
+  }
   if (const auto spotify = doc.find("spotify"); spotify != doc.end() && spotify->is_object()) {
     if (std::string id = spotify->value("clientId", ""); !id.empty()) config.spotify_client_id = std::move(id);
   }
