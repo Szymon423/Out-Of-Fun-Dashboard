@@ -1,6 +1,8 @@
 // Dashboard state: loaded from /api/state and kept current by /api/events (SSE).
-// Without a server (or with ?mock in the URL) it uses test data, so the look can be worked
-// on alone. Fine-grained $state means a weather update repaints only the weather card.
+// With ?mock in the URL, or in development without a server, it uses test data, so the look
+// can be worked on alone. The built page on the Pi never does: there the server may still
+// be starting, so it keeps trying. Fine-grained $state means a weather update repaints only
+// the weather card.
 import { mockState } from './mock';
 import { mockPhotos } from './mockPhotos';
 import type { CalendarSource, DashboardState, Display, Light, NowPlaying, Photos, Printer, Update } from './types';
@@ -17,6 +19,13 @@ export const dash: DashboardState = $state({
 });
 
 export const connection = $state({ mode: 'connecting' as 'connecting' | 'live' | 'mock' | 'offline' });
+
+// Generated landscapes stand in for Immich while the server has no photos (until stage D3).
+let placeholderPhotos: Photos | null = null;
+
+function setPhotos(photos: Photos | null): void {
+  dash.photos = photos ?? placeholderPhotos;
+}
 
 function apply(update: Update): void {
   switch (update.topic) {
@@ -39,7 +48,7 @@ function apply(update: Update): void {
       dash.printer = update.data as Printer | null;
       break;
     case 'photos':
-      dash.photos = update.data as Photos | null;
+      setPhotos(update.data as Photos | null);
       break;
     case 'display':
       dash.display = update.data as Display | null;
@@ -55,20 +64,35 @@ function useMock(): void {
   });
 }
 
+const RETRY_MS = 2000;
+
 export async function connect(): Promise<void> {
   if (new URLSearchParams(location.search).has('mock')) {
     useMock();
     return;
   }
-  try {
-    const res = await fetch('/api/state');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    Object.assign(dash, (await res.json()) as DashboardState);
-  } catch (e) {
-    console.warn('No dashboard server, using test data:', e);
-    useMock();
-    return;
+  for (;;) {
+    try {
+      const res = await fetch('/api/state');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const state = (await res.json()) as DashboardState;
+      Object.assign(dash, state);
+      setPhotos(state.photos);
+      break;
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('No dashboard server, using test data:', e);
+        useMock();
+        return;
+      }
+      connection.mode = 'offline';
+      await new Promise((r) => setTimeout(r, RETRY_MS));
+    }
   }
+  void mockPhotos(true).then((photos) => {
+    placeholderPhotos = photos;
+    if (!dash.photos) dash.photos = photos;
+  });
   const events = new EventSource('/api/events');
   events.addEventListener('update', (ev) => apply(JSON.parse((ev as MessageEvent<string>).data) as Update));
   events.onopen = () => (connection.mode = 'live');

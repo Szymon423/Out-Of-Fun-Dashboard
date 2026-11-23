@@ -1,4 +1,5 @@
-// Generated landscapes standing in for Immich photos in test mode (no server, no network).
+// Generated landscapes standing in for Immich photos: in test mode, and as placeholders while
+// the server has no photos (before stage D3), so the screensaver never shows a bare clock.
 // Drawn once on a canvas and kept as JPEG blobs, so showing them costs the same as real photos.
 import type { Photo, Photos } from './types';
 
@@ -102,7 +103,8 @@ async function landscape(index: number, w = 1280, h = 720): Promise<{ url: strin
   return { url: blob ? URL.createObjectURL(blob) : c.toDataURL('image/jpeg', 0.88), blurUrl: blurred(c) };
 }
 
-export async function mockPhotos(): Promise<Photos> {
+/** `placeholder`: no made-up Immich memory, an album name that says what these are. */
+export async function mockPhotos(placeholder = false): Promise<Photos> {
   const items: Photo[] = [];
   for (let i = 0; i < PALETTES.length; i++) {
     const taken = new Date();
@@ -110,5 +112,6 @@ export async function mockPhotos(): Promise<Photos> {
     const { url, blurUrl } = await landscape(i);
     items.push({ id: `mock-${i}`, url, blurUrl, takenAt: taken.toISOString(), place: PLACES[i] });
   }
+  if (placeholder) return { album: 'Pejzaże', items, memory: null };
   return { album: 'Ulubione', items, memory: { title: 'Rok temu', photo: items[0] } };
 }

@@ -27,6 +27,23 @@ Plan z 22.11.2026. Ekran: Touch Display 2 w poziomie, 1280×720, dotyk. Silnik: 
   - Każde źródło danych to osobny dostawca za małym interfejsem. Dostawca w tle odświeża dane w swoim rytmie i publikuje zmianę.
   - Światła zostają makietą w pamięci, dopóki nie ma sprzętu.
 - **Dane trwałe** na `/data/dashboard`: konfiguracja, tokeny OAuth i pamięć podręczna zdjęć. Przetrwają aktualizacje RAUC.
+- **Serwer w szczegółach (D2).**
+  - Opcje: `--listen 127.0.0.1:8080`, `--web /usr/share/dashboard/web`, `--data /data/dashboard`, `--backlight auto|none|katalog` (domyślnie `none`).
+  - `config.json` w katalogu danych tworzy się sam jako szablon:
+
+    ```json
+    { "location": { "name": "Kraków" } }
+    ```
+
+    Sama nazwa wystarcza, bo serwer szuka współrzędnych w geokoderze Open-Meteo. Można też podać `latitude` i `longitude`, wtedy nazwa jest tylko wyświetlana. Bez miejscowości nie ma pogody.
+  - Zepsuty `config.json` nie zatrzymuje serwera: działa dalej bez tej części. Gdyby się zatrzymywał, health check odrzuciłby aktualizację, a poprzedni slot czyta ten sam `/data`.
+  - Pogoda: Open-Meteo co 15 min. Po błędzie ponawia po 1 min, potem co dwa razy dłużej, maksymalnie co 15 min.
+  - Światła: makieta zapisywana w `lights.json`, więc stan przetrwa restart.
+  - Jasność: `/sys/class/backlight/*/brightness`. Touch Display 2 ma skalę 0–31. Serwer nigdy nie zapisuje 0, bo to całkiem gasi podświetlenie.
+  - `Type=notify`: serwer zgłasza gotowość dopiero z otwartym portem, więc kiosk startuje po nim i nie trafia na pusty adres.
+  - SSE zaczyna od wszystkich tematów naraz, więc nic nie ginie między `/api/state` a otwarciem strumienia. Bez zmian strumień co 15 s wysyła komentarz.
+  - Zbudowana strona na Pi nie przechodzi na dane testowe. Czeka na serwer i co 2 s próbuje znowu.
+  - Dopóki serwer nie ma zdjęć (D3), wygaszacz i pulpit zdjęć pokazują wygenerowane pejzaże.
 - **Kiosk** ładuje `http://127.0.0.1:8080/`. `dashboard-health` sprawdza także `dashboard-server.service`, więc wersja z niedziałającym serwerem wraca do poprzedniego slotu.
 
 ## Interfejs (wymagania z 22.11.2026)
@@ -131,8 +148,9 @@ Pomiar `?bench` na Pi 4 z 22.11.2026, wersja produkcyjna. Przy każdym przejści
 | Ścieżka | Opis |
 |---|---|
 | `GET /api/state` | Pełny stan: `weather`, `calendars`, `events`, `music`, `lights`, `printer`, `photos`, `display`. Każde pole może być `null`, gdy dostawca jeszcze nie ma danych albo nie jest skonfigurowany. |
+| `GET /api/health` | `{ "ok": true, "uptimeS": … }`, dla health checku |
 | `GET /api/events` | SSE, zdarzenie `update` z `{ "topic": "weather" \| "calendars" \| "events" \| "music" \| "lights" \| "printer" \| "photos" \| "display", "data": … }` |
-| `POST /api/music/{play,pause,next,previous}` | Sterowanie Spotify |
+| `POST /api/music/{play,pause,next,previous}` | Sterowanie Spotify; do D4 odpowiada 501 |
 | `POST /api/lights/{id}` | `{ "on": bool }`, dla RGBW też `"brightness": 0–100`, `"color": "#rrggbb"`, `"white": 0–100`; na razie makieta |
 | `POST /api/display` | `{ "brightness": 0–100 }`, czyli podświetlenie ekranu |
 
@@ -144,7 +162,7 @@ Typy danych są w `web/src/lib/types.ts`. Serwer zwraca dokładnie te pola.
 - **Wygląd na prawdziwym ekranie, bez builda obrazu:**
   - `tools/kiosk-url.sh dev` przełącza kiosk na Pi na serwer Vite z PC, więc zmiany widać od razu (HMR).
   - `tools/kiosk-url.sh reset` przywraca adres docelowy.
-- **Serwer na PC:** budowany natywnie (`meson`), z katalogiem danych `devdata/` zamiast `/data`.
+- **Serwer na PC:** budowany natywnie (`meson`), z katalogiem danych `devdata/` zamiast `/data`. Komendy są w README. Serwer Vite przekazuje `/api` do serwera, więc `kiosk-url.sh dev` pokazuje na Pi prawdziwe dane z serwera na PC.
 - **Wydanie:**
   - Przepisy Yocto `dashboard-server` i `dashboard-web`, potem `./build.sh dashboard-bundle && ./tools/ota.sh`.
   - `dashboard-web` pakuje gotowy `web/dist`. `build.sh` zbuduje go na PC przed BitBake'em, bo Node w Yocto to długi build i kłopotliwe zależności npm.
@@ -154,7 +172,8 @@ Typy danych są w `web/src/lib/types.ts`. Serwer zwraca dokładnie te pola.
 | Etap | Zakres | Sprawdzenie |
 |---|---|---|
 | D1 | Szkielet frontendu na danych testowych: pulpity z przeglądem, motywy, wygaszacz, podsumowanie i pierwsze wersje pulpitów | wygląd, gesty i płynność na ekranie Pi przez `kiosk-url.sh dev`; wybór kroju zegara |
-| D2 | Serwer C++: pliki statyczne, `/api/state`, SSE, pogoda z Open-Meteo, światła (makieta); przepisy Yocto, kiosk na `127.0.0.1:8080`, serwer w `dashboard-health` | prawdziwa pogoda na Pi po aktualizacji przez OTA |
+| D2a | Serwer C++: pliki statyczne, `/api/state`, SSE, pogoda z Open-Meteo, światła (makieta), jasność ekranu; na PC | gotowe 23.11.2026: prawdziwa pogoda na Pi przez `kiosk-url.sh dev` |
+| D2b | Przepisy Yocto `dashboard-server` i `dashboard-web`, kiosk na `127.0.0.1:8080`, serwer w `dashboard-health` | gotowe 23.11.2026: wersja 0.4 przez OTA, health check przeszedł, pogoda dla Wrocławia, jasność zapisuje się do podświetlenia, serwer zajmuje 14 MB RAM |
 | D3 | Zdjęcia z Immicha jako tło: klucz API, wybór albumu, przenikanie, pamięć podręczna na `/data` | płynne przenikanie, pamięć RAM |
 | D4 | Spotify: autoryzacja (jednorazowo z PC albo kod QR na ekranie), co gra, sterowanie | sterowanie z ekranu |
 | D4b | Drukarka Bambu Lab przez lokalne MQTT (stan, postęp, temperatury, AMS) | prawdziwy wydruk widoczny na pulpicie |
