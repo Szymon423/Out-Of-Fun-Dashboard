@@ -16,6 +16,7 @@
   import { hhmm, longDate, temp, weatherLook } from '../format';
   import { go, nav, PAGES, type PageId } from '../nav.svelte';
   import { PRINTER_STATE, remaining } from '../printer';
+  import { currentPhoto } from '../photoClock.svelte';
   import { dash } from '../state.svelte';
 
   const COLOR: Record<PageId, string> = {
@@ -64,7 +65,7 @@
     }
   }
 
-  const memory = $derived(dash.photos?.memory?.photo.url ?? dash.photos?.items[0]?.url ?? null);
+  const memory = $derived(currentPhoto()?.url ?? dash.photos?.memory?.photo.url ?? null); // the one shown everywhere
 
   const SETTLE_MS = 400;
   let openedAt = 0;

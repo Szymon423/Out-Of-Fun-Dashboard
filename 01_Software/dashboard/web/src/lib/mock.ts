@@ -184,6 +184,14 @@ export function mockState(): DashboardState {
       device: 'Głośnik w salonie',
       volume: 45,
     },
+    settings: {
+      photoIntervalS: 20,
+      photoOrder: 'random',
+      nightEnabled: new URLSearchParams(location.search).has('night'),
+      nightFrom: '00:00',
+      nightTo: '23:59',
+      hiddenPlaylists: [],
+    },
     musicLibrary: {
       playlists: [
         'Do pracy',

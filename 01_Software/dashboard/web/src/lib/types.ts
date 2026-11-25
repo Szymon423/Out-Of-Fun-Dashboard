@@ -192,6 +192,23 @@ export interface DashboardState {
   photos: Photos | null;
   display: Display | null;
   musicLibrary: MusicLibrary | null;
+  settings: Settings | null;
+}
+
+/** The user's choices from the settings sheet, kept by the server (settings.hpp). */
+export interface Settings {
+  photoIntervalS: number; // how long each photo stays, everywhere at once
+  photoOrder: 'random' | 'newest';
+  nightEnabled: boolean; // the night screensaver: black, only the clock and the date
+  nightFrom: string; // "HH:MM"
+  nightTo: string; // "HH:MM", may be after midnight
+  hiddenPlaylists: string[]; // spotify: URIs left out of the library
+}
+
+/** A page of a track list, from GET /api/music/tracks. */
+export interface TrackPage {
+  tracks: Track[];
+  total: number;
 }
 
 export type Topic =
@@ -203,7 +220,8 @@ export type Topic =
   | 'printer'
   | 'photos'
   | 'display'
-  | 'musicLibrary';
+  | 'musicLibrary'
+  | 'settings';
 export interface Update {
   topic: Topic;
   data: unknown;

@@ -38,6 +38,7 @@ core = static_library(
   'src/lights.cpp',
   'src/log.cpp',
   'src/printer.cpp',
+  'src/settings.cpp',
   'src/spotify.cpp',
   'src/weather.cpp',
   dependencies: [curl, json, threads, paho, ical],
@@ -78,6 +79,10 @@ test(
 test(
   'calendar',
   executable('calendar-test', 'tests/calendar_test.cpp', dependencies: core_dep, build_by_default: false),
+)
+test(
+  'settings',
+  executable('settings-test', 'tests/settings_test.cpp', dependencies: core_dep, build_by_default: false),
 )
 test(
   'hub',

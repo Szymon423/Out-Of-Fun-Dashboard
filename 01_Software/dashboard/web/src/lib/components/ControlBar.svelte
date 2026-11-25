@@ -1,12 +1,15 @@
 <!--
-  Control bar pulled down from the top edge: theme, screen brightness and the screensaver.
+  Control bar pulled down from the top edge: theme, screen brightness, the screensaver (a
+  lock, as it locks the screen in a way) and the settings. Everything is 56 px tall, for a
+  finger that reaches up to the top of the screen.
   It follows the finger while pulled (nav.pull, set by the pager), and closes with a tap
   beside it, a swipe up on it, or by itself after 8 s without a touch. Moves by transform.
 -->
 <script lang="ts">
   import type { Component } from 'svelte';
+  import Lock from '@lucide/svelte/icons/lock';
   import Moon from '@lucide/svelte/icons/moon';
-  import MoonStar from '@lucide/svelte/icons/moon-star';
+  import Settings from '@lucide/svelte/icons/settings';
   import Sun from '@lucide/svelte/icons/sun';
   import SunDim from '@lucide/svelte/icons/sun-dim';
   import SunMoon from '@lucide/svelte/icons/sun-moon';
@@ -16,7 +19,7 @@
   import Segmented from './Segmented.svelte';
   import Slider from './Slider.svelte';
 
-  const HIDDEN = -150; // px above the screen when closed
+  const HIDDEN = -170; // px above the screen when closed
   const AUTO_CLOSE_MS = 8000;
 
   const MODES: { value: ThemeMode; label: string; icon: Component }[] = [
@@ -39,6 +42,11 @@
     const timer = setTimeout(() => (nav.controls = false), AUTO_CLOSE_MS);
     return () => clearTimeout(timer);
   });
+
+  function openSettings(): void {
+    nav.controls = false;
+    nav.settings = true;
+  }
 
   // Swipe up on the bar closes it.
   let startY: number | null = null;
@@ -65,14 +73,19 @@
   onpointerdown={down}
   onpointerup={up}
 >
-  <Segmented options={MODES} value={activeMode()} onchange={setThemeMode} />
+  <Segmented options={MODES} value={activeMode()} onchange={setThemeMode} large />
   <div class="brightness">
-    <Slider value={dash.display?.brightness ?? 80} min={5} icon={SunDim} label="Jasność ekranu" onchange={setBrightness} />
+    <Slider
+      value={dash.display?.brightness ?? 80}
+      min={5}
+      icon={SunDim}
+      label="Jasność ekranu"
+      height={56}
+      onchange={setBrightness}
+    />
   </div>
-  <button class="saver" onclick={openSaver}>
-    <MoonStar size={19} strokeWidth={2} />
-    Wygaszacz
-  </button>
+  <button class="round" aria-label="Wygaszacz" onclick={openSaver}><Lock size={24} strokeWidth={2} /></button>
+  <button class="round" aria-label="Ustawienia" onclick={openSettings}><Settings size={24} strokeWidth={2} /></button>
   <i class="grabber"></i>
 </div>
 
@@ -90,9 +103,9 @@
     z-index: 6;
     display: flex;
     align-items: center;
-    gap: 18px;
-    width: 1000px;
-    padding: 20px 22px 26px;
+    gap: 16px;
+    width: 1060px;
+    padding: 20px 22px 28px;
     border-radius: 30px;
     background: var(--card-solid);
     box-shadow:
@@ -111,20 +124,18 @@
     flex: 1;
   }
 
-  .saver {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    height: 46px;
-    padding: 0 18px;
-    border-radius: 14px;
+  .round {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
     background: var(--fill-strong);
-    font-size: 15px;
-    font-weight: 600;
   }
 
-  .saver:active {
-    transform: scale(0.96);
+  .round:active {
+    transform: scale(0.94);
   }
 
   .grabber {

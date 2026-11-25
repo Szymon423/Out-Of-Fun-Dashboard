@@ -25,11 +25,11 @@
   import type { Component } from 'svelte';
   import PageFrame from '../components/PageFrame.svelte';
   import Segmented from '../components/Segmented.svelte';
-  import Slider from '../components/Slider.svelte';
   import TrackProgress from '../components/TrackProgress.svelte';
   import { nav, PAGES } from '../nav.svelte';
   import { duration } from '../format';
-  import { dash, fetchDevices, fetchTracks, music, playContext, setVolume, transferTo } from '../state.svelte';
+  import { dash, fetchDevices, fetchTracks, music, playContext, setVolume, settings, transferTo } from '../state.svelte';
+  import VolumeSlider from '../components/VolumeSlider.svelte';
   import type { LibraryItem, SpotifyDevice, Track } from '../types';
 
   const PAGE = 8;
@@ -47,7 +47,8 @@
     if (!lib) return [];
     if (tab === 'recent') return lib.recent;
     const liked = lib.likedUri ? [{ name: 'Polubione utwory', uri: lib.likedUri, imageUrl: null, detail: 'Twoja kolekcja' }] : [];
-    return [...liked, ...lib.playlists];
+    const hidden = settings().hiddenPlaylists; // chosen in the settings sheet
+    return [...liked, ...lib.playlists.filter((p) => !hidden.includes(p.uri))];
   });
   const pages = $derived(Math.max(1, Math.ceil(items.length / PAGE)));
   const shown = $derived(items.slice(page * PAGE, page * PAGE + PAGE));
@@ -72,12 +73,30 @@
     });
   }
 
+  // The first 10 tracks at once, so a long list (the liked songs) shows without waiting; the
+  // rest follows in the background, 50 at a time, up to 500.
+  const FIRST = 10;
+  const MORE = 50;
+  const MAX_TRACKS = 500;
+
   async function openItem(item: LibraryItem): Promise<void> {
     open = item;
     list = null;
     listPage = 0;
-    const tracks = await fetchTracks(item.uri);
-    if (open === item) list = tracks ?? 'error';
+    const first = await fetchTracks(item.uri, 0, FIRST);
+    if (open !== item) return;
+    if (!first) {
+      list = 'error';
+      return;
+    }
+    const tracks = first.tracks;
+    list = tracks;
+    const total = Math.min(first.total, MAX_TRACKS);
+    for (let offset = tracks.length; offset < total; offset += MORE) {
+      const next = await fetchTracks(item.uri, offset, MORE);
+      if (open !== item || !next || !next.tracks.length) return;
+      list = [...(list as Track[]), ...next.tracks];
+    }
   }
 
   /** A soft two-colour gradient from the name, for covers Spotify does not have. */
@@ -139,7 +158,7 @@
             <Speaker size={17} /> <span>{m.device || 'Wybierz urządzenie'}</span> <ChevronDown size={16} />
           </button>
           {#if m.volume !== null}
-            <div class="volume"><Slider value={m.volume} icon={Volume2} label="Głośność" onchange={setVolume} /></div>
+            <div class="volume"><VolumeSlider value={m.volume} icon={Volume2} label="Głośność" onchange={setVolume} /></div>
           {/if}
         </div>
       {:else}

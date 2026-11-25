@@ -6,6 +6,7 @@
   import Backdrop from './lib/components/Backdrop.svelte';
   import EventSheet from './lib/components/calendar/EventSheet.svelte';
   import ControlBar from './lib/components/ControlBar.svelte';
+  import SettingsSheet from './lib/components/SettingsSheet.svelte';
   import Pager from './lib/components/Pager.svelte';
   import Screensaver from './lib/components/Screensaver.svelte';
   import FontsPage from './lib/pages/FontsPage.svelte';
@@ -29,6 +30,7 @@
     <Pager />
     <EventSheet />
     <ControlBar />
+    <SettingsSheet />
   </div>
   <Screensaver bind:covered />
 

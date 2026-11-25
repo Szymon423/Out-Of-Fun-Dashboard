@@ -14,8 +14,9 @@ import type {
   NowPlaying,
   Photos,
   Printer,
+  Settings,
   SpotifyDevice,
-  Track,
+  TrackPage,
   Update,
 } from './types';
 
@@ -29,7 +30,28 @@ export const dash: DashboardState = $state({
   photos: null,
   display: null,
   musicLibrary: null,
+  settings: null,
 });
+
+export const DEFAULT_SETTINGS: Settings = {
+  photoIntervalS: 20,
+  photoOrder: 'random',
+  nightEnabled: false,
+  nightFrom: '22:00',
+  nightTo: '06:30',
+  hiddenPlaylists: [],
+};
+
+/** The settings in force: the server's, or the defaults until they arrive. */
+export function settings(): Settings {
+  return dash.settings ?? DEFAULT_SETTINGS;
+}
+
+/** Changes settings: shown at once, kept by the server. */
+export function saveSettings(change: Partial<Settings>): void {
+  dash.settings = { ...settings(), ...change };
+  void post('/api/settings', change);
+}
 
 export const connection = $state({ mode: 'connecting' as 'connecting' | 'live' | 'mock' | 'offline' });
 
@@ -68,6 +90,9 @@ function apply(update: Update): void {
       break;
     case 'musicLibrary':
       dash.musicLibrary = update.data as MusicLibrary | null;
+      break;
+    case 'settings':
+      dash.settings = update.data as Settings | null;
       break;
   }
 }
@@ -147,16 +172,18 @@ export function playContext(uri: string, deviceId?: string, offset?: string): vo
   void post('/api/music/context', { uri, ...(deviceId ? { deviceId } : {}), ...(offset ? { offset } : {}) });
 }
 
-/** The tracks of a playlist, album or the liked songs; null when Spotify does not give them. */
-export async function fetchTracks(uri: string): Promise<Track[] | null> {
+/** A page of the tracks of a playlist, album or the liked songs; null when Spotify does not
+ *  give them. */
+export async function fetchTracks(uri: string, offset = 0, limit = 50): Promise<TrackPage | null> {
   if (connection.mode === 'mock') {
     const names = ['Intro', 'Wait', 'Reunion', 'Splendor', 'Claudia Lewis', 'This Bright Flash', 'Soon, My Friend',
       'Steve McQueen', 'Echoes of Mine', 'Ok Pal', 'Klaus I Love You', 'New Map', 'My Tears Are Becoming a Sea'];
-    return names.map((name, i) => ({ name, artist: 'M83', uri: `${uri}:t${i}`, durationMs: 180_000 + i * 13_000 }));
+    const all = names.map((name, i) => ({ name, artist: 'M83', uri: `${uri}:t${i}`, durationMs: 180_000 + i * 13_000 }));
+    return { tracks: all.slice(offset, offset + limit), total: all.length };
   }
   try {
-    const res = await fetch(`/api/music/tracks?uri=${encodeURIComponent(uri)}`);
-    return res.ok ? ((await res.json()) as Track[]) : null;
+    const res = await fetch(`/api/music/tracks?uri=${encodeURIComponent(uri)}&offset=${offset}&limit=${limit}`);
+    return res.ok ? ((await res.json()) as TrackPage) : null;
   } catch {
     return null;
   }

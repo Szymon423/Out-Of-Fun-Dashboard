@@ -315,22 +315,24 @@ Spotify::Result Spotify::play_context(const std::string &uri, const std::string 
   return act("play " + uri, "PUT", path, body.dump());
 }
 
-json Spotify::tracks(const std::string &uri) {
+json Spotify::tracks(const std::string &uri, int offset, int limit) {
   // spotify:playlist:<id>, spotify:album:<id>, spotify:user:<user>:collection
   const auto colon = uri.rfind(':');
   const std::string id = uri.substr(colon + 1);
+  const std::string page = std::format("?offset={}&limit={}", std::max(0, offset), std::clamp(limit, 1, 50));
   std::string path;
   if (uri.starts_with("spotify:playlist:")) {
-    path = "/playlists/" + url_encode(id) + "/items?limit=100";
+    path = "/playlists/" + url_encode(id) + "/items" + page;
   } else if (uri.starts_with("spotify:album:")) {
-    path = "/albums/" + url_encode(id) + "/tracks?limit=50";
+    path = "/albums/" + url_encode(id) + "/tracks" + page;
   } else if (uri.ends_with(":collection")) {
-    path = "/me/tracks?limit=50";
+    path = "/me/tracks" + page;
   } else {
     return nullptr;
   }
   try {
-    return track_list(json::parse(api("GET", path).body).value("items", json::array()));
+    const json answer = json::parse(api("GET", path).body);
+    return {{"tracks", track_list(answer.value("items", json::array()))}, {"total", integer(answer, "total")}};
   } catch (const NotSignedIn &) {
     return nullptr;
   } catch (const std::exception &e) {

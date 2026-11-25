@@ -17,6 +17,7 @@ Hub::Hub()
           {"weather", nullptr}, {"calendars", nullptr}, {"events", nullptr},
           {"music", nullptr},   {"lights", json::array()}, {"printer", nullptr},
           {"photos", nullptr},  {"display", nullptr},      {"musicLibrary", nullptr},
+          {"settings", nullptr},
       } {}
 
 void Hub::publish(const std::string &topic, json data) {

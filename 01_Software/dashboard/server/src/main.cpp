@@ -19,6 +19,7 @@
 #include "log.hpp"
 #include "immich.hpp"
 #include "printer.hpp"
+#include "settings.hpp"
 #include "spotify.hpp"
 #include "systemd.hpp"
 #include "weather.hpp"
@@ -112,6 +113,7 @@ int main(int argc, char **argv) {
   }
 
   Hub hub;
+  SettingsStore settings(hub, options.data / "settings.json");
   Lights lights(hub, options.data / "lights.json");
   Display display(hub, backlight_dir(options.backlight));
   std::optional<WeatherProvider> weather;
@@ -123,7 +125,7 @@ int main(int argc, char **argv) {
   const fs::path photos_dir = options.data / "photos";
   std::optional<PhotosProvider> photos;
   if (config.immich) {
-    photos.emplace(hub, *config.immich, photos_dir);
+    photos.emplace(hub, *config.immich, photos_dir, settings);
   } else {
     log_info("photos: no immich in {}/config.json, the page shows placeholders", options.data.string());
   }
@@ -148,7 +150,7 @@ int main(int argc, char **argv) {
     log_info("printer: no printer in {}/config.json", options.data.string());
   }
 
-  HttpServer http(hub, lights, display, spotify ? &*spotify : nullptr, options.web, photos_dir);
+  HttpServer http(hub, lights, display, settings, spotify ? &*spotify : nullptr, options.web, photos_dir);
   if (!http.bind(options.host, options.port)) {
     log_error("cannot listen on {}:{}: {}", options.host, options.port, std::strerror(errno));
     return 1;

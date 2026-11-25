@@ -4,6 +4,9 @@
   sits in the bottom left corner, where the photo place and date sit on the right, both on a
   soft shade along the bottom edge; the photo stays the main thing. (A big frosted panel
   with the clock was dropped on 2026-11-23: it covered too much of the photo.)
+  The photo is the one shown everywhere at that moment (photoClock.svelte.ts).
+  Night (settings: nightEnabled, nightFrom-nightTo): black, only a dim clock and the date in
+  the middle, so the screen does not light up the room.
   A touch closes it. `covered` turns true once it fully covers the screen, so the pages
   underneath can stop being drawn.
 -->
@@ -13,20 +16,33 @@
   import { clockStyle } from '../clockFont.svelte';
   import { hhmm, longDate, temp, weatherLook } from '../format';
   import { closeSaver, nav } from '../nav.svelte';
-  import { dash } from '../state.svelte';
+  import { photoClock } from '../photoClock.svelte';
+  import { dash, settings } from '../state.svelte';
   import Slideshow from './Slideshow.svelte';
 
   let { covered = $bindable(false) }: { covered?: boolean } = $props();
 
-  const SLIDE_MS = 20000;
   const monthYear = new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric' });
 
   const photos = $derived(dash.photos?.items ?? []);
   const w = $derived(dash.weather);
   const look = $derived(w ? weatherLook(w.now.code, w.now.isDay) : null);
 
-  let current = $state(0);
-  const photo = $derived(photos.length ? photos[current % photos.length] : null);
+  const photo = $derived(photos.length ? photos[photoClock.index % photos.length] : null);
+
+  const minutes = (hhmmText: string) => {
+    const [h, m] = hhmmText.split(':').map(Number);
+    return h * 60 + m;
+  };
+  /** Inside the night hours; a range like 22:00-06:30 runs past midnight. */
+  const night = $derived.by(() => {
+    const s = settings();
+    if (!s.nightEnabled) return false;
+    const now = clock.now.getHours() * 60 + clock.now.getMinutes();
+    const from = minutes(s.nightFrom);
+    const to = minutes(s.nightTo);
+    return from <= to ? now >= from && now < to : now >= from || now < to;
+  });
 
   function close(e: PointerEvent): void {
     e.stopPropagation();
@@ -43,7 +59,15 @@
     onintroend={() => (covered = true)}
     onoutrostart={() => (covered = false)}
   >
-    {#if photos.length}<Slideshow {photos} intervalMs={SLIDE_MS} bind:current />{/if}
+    {#if night}
+      <div class="night">
+        <div class="time num" style={clockStyle(240)}>{hhmm(clock.now)}</div>
+        <div class="date">{longDate(clock.now)}</div>
+      </div>
+    {:else}
+    {#if photos.length}
+      <Slideshow {photos} current={photoClock.index} zoomMs={settings().photoIntervalS * 1000 + 2500} />
+    {/if}
     <div class="shade"></div>
 
     <div class="clock">
@@ -66,10 +90,33 @@
         </div>
       {/key}
     {/if}
+    {/if}
   </div>
 {/if}
 
 <style>
+  .night {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    opacity: 0.55;
+  }
+
+  .night .time {
+    line-height: 0.9;
+  }
+
+  .night .date {
+    margin-top: 14px;
+    font-size: 24px;
+    font-weight: 500;
+    opacity: 0.8;
+  }
+
   .saver {
     position: absolute;
     inset: 0;

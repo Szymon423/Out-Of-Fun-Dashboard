@@ -70,9 +70,11 @@ public:
    *  of the playlist follows it. */
   Result play_context(const std::string &uri, const std::string &device_id = {}, const std::string &offset_uri = {});
 
-  /** The tracks of a spotify:playlist:, spotify:album: or ...:collection URI, at most 100;
-   *  null when it cannot be read (no login, a missing scope, an editorial playlist). */
-  nlohmann::json tracks(const std::string &uri);
+  /** A page of the tracks of a spotify:playlist:, spotify:album: or ...:collection URI:
+   *  {tracks, total}, from `offset`, at most `limit` (1-50). The page asks for 10 first, to
+   *  show something at once, then for the rest. Null when it cannot be read (no login, a
+   *  missing scope, an editorial playlist). */
+  nlohmann::json tracks(const std::string &uri, int offset = 0, int limit = 50);
 
   /** Moves the playback to another device, keeping it playing. */
   Result transfer(const std::string &device_id);

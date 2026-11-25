@@ -39,6 +39,7 @@ export const nav = $state({
   overview: params.has('overview'),
   saver: params.has('saver'),
   controls: params.has('controls'), // the control bar pulled down from the top
+  settings: params.has('settings'), // the settings sheet, opened from the control bar
   pull: null as number | null, // finger offset while pulling the control bar
   waking: false, // the screensaver is about to fade out; the pages are being painted under it
 });

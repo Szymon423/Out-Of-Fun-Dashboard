@@ -65,17 +65,24 @@ int local_year() {
   return tm.tm_year + 1900;
 }
 
-bool sleep_for(std::stop_token stop, std::chrono::seconds duration) {
-  std::mutex mutex;
-  std::condition_variable_any cv;
-  std::unique_lock lock(mutex);
-  cv.wait_for(lock, stop, duration, [] { return false; });
-  return !stop.stop_requested();
-}
-
 class Immich {
 public:
   Immich(ImmichSettings settings, fs::path cache) : settings_(std::move(settings)), cache_(std::move(cache)) {}
+
+  /** A page of the library, newest first: {items, next page or 0 after the last}. */
+  std::pair<json, int> newest_assets(int page) const {
+    const json doc = json::parse(fetch("/api/search/metadata",
+                                       json{{"type", "IMAGE"}, {"withExif", true}, {"order", "desc"}, {"size", kAsk},
+                                            {"page", page}}
+                                           .dump())
+                                     .body);
+    const json assets = doc.value("assets", json::object());
+    const json next = assets.value("nextPage", json(nullptr));
+    int next_page = 0;
+    if (next.is_string()) next_page = std::atoi(next.get<std::string>().c_str());
+    if (next.is_number()) next_page = next.get<int>();
+    return {assets.value("items", json::array()), next_page};
+  }
 
   json random_assets() const {
     return json::parse(
@@ -130,17 +137,29 @@ private:
 
 /** A new batch: random assets that fit the screen, with their previews cached. A photo
  *  whose preview fails is left out; a missing permission fails the whole batch. */
-json fetch_batch(const Immich &immich) {
+json fetch_batch(const Immich &immich, bool newest, int &page) {
   json items = json::array();
-  for (const json &asset : immich.random_assets()) {
-    if (items.size() >= kBatch) break;
-    if (!fits_screen(asset)) continue;
-    try {
-      items.push_back(photo_json(asset, immich.preview(asset.at("id").get<std::string>())));
-    } catch (const FetchError &e) {
-      if (e.status == 403) throw;
-      log_warning("photos: skipping one photo: {}", e.what());
+  auto take = [&](const json &assets) {
+    for (const json &asset : assets) {
+      if (items.size() >= kBatch) break;
+      if (!fits_screen(asset)) continue;
+      try {
+        items.push_back(photo_json(asset, immich.preview(asset.at("id").get<std::string>())));
+      } catch (const FetchError &e) {
+        if (e.status == 403) throw;
+        log_warning("photos: skipping one photo: {}", e.what());
+      }
     }
+  };
+  if (!newest) {
+    take(immich.random_assets());
+    return items;
+  }
+  // From the newest back, page after page; after the oldest it starts at the newest again.
+  for (int tries = 0; tries < 4 && items.size() < kBatch; ++tries) {
+    const auto [assets, next] = immich.newest_assets(std::max(1, page));
+    take(assets);
+    page = next > 0 ? next : 1;
   }
   return items;
 }
@@ -173,8 +192,10 @@ void file_names(const json &photos, std::set<std::string> &out) {
   }
 }
 
-void run(std::stop_token stop, Hub &hub, const Immich &immich) {
+void run(std::stop_token stop, Hub &hub, const Immich &immich, const SettingsStore &prefs,
+         PhotosProvider::Wake &wake) {
   std::chrono::seconds retry = kFirstRetry;
+  int page = 1; // of the library, for photoOrder "newest"
   json previous = json::array(); // the last batch; the page may still show it
   json memory = nullptr;
   std::string memory_date;
@@ -194,7 +215,7 @@ void run(std::stop_token stop, Hub &hub, const Immich &immich) {
         memory = pick_memory(immich, memories); // a failing preview is retried with the batch
         memory_date = local_date();             // once a day, or after a restart
       }
-      json items = fetch_batch(immich);
+      json items = fetch_batch(immich, prefs.get().value("photoOrder", "random") == "newest", page);
       if (items.empty()) {
         log_warning("photos: no landscape photos in this random batch, trying again soon");
         next = 5min;
@@ -219,7 +240,7 @@ void run(std::stop_token stop, Hub &hub, const Immich &immich) {
                   next.count(), e.what());
       failing = true;
     }
-    if (!sleep_for(stop, next)) return;
+    if (!wake.sleep(stop, next)) return;
   }
 }
 
@@ -273,12 +294,36 @@ std::optional<std::string> preview_file(const std::string &asset_id, const std::
   return std::nullopt;
 }
 
-PhotosProvider::PhotosProvider(Hub &hub, ImmichSettings settings, fs::path cache_dir)
-    : thread_([&hub, settings = std::move(settings), cache_dir = std::move(cache_dir)](std::stop_token stop) {
+bool PhotosProvider::Wake::sleep(std::stop_token stop, std::chrono::seconds duration) {
+  std::unique_lock lock(mutex);
+  cv.wait_for(lock, stop, duration, [this] { return poked; });
+  poked = false;
+  return !stop.stop_requested();
+}
+
+void PhotosProvider::Wake::poke() {
+  {
+    const std::lock_guard lock(mutex);
+    poked = true;
+  }
+  cv.notify_all();
+}
+
+PhotosProvider::PhotosProvider(Hub &hub, ImmichSettings settings, fs::path cache_dir, SettingsStore &prefs)
+    : thread_([&hub, &prefs, wake = wake_, settings = std::move(settings),
+               cache_dir = std::move(cache_dir)](std::stop_token stop) {
         std::error_code ec;
         fs::create_directories(cache_dir, ec);
         if (ec) log_warning("photos: cannot create {}: {}", cache_dir.string(), ec.message());
-        run(stop, hub, Immich(settings, cache_dir));
-      }) {}
+        run(stop, hub, Immich(settings, cache_dir), prefs, *wake);
+      }) {
+  // Another order: a new batch now, not in up to 30 minutes.
+  prefs.on_change([wake = wake_, order = prefs.get().value("photoOrder", "random")](const json &now) mutable {
+    const std::string next = now.value("photoOrder", "random");
+    if (next == order) return;
+    order = next;
+    wake->poke();
+  });
+}
 
 } // namespace dash

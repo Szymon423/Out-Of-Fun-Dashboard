@@ -9,6 +9,7 @@
 #include "display.hpp"
 #include "hub.hpp"
 #include "lights.hpp"
+#include "settings.hpp"
 #include "spotify.hpp"
 
 namespace dash {
@@ -17,7 +18,7 @@ class HttpServer {
 public:
   /** `photos_dir` holds the cached Immich previews served as /api/photos/<file>.
    *  `spotify` is null when Spotify is not configured. */
-  HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spotify, const std::filesystem::path &web_dir,
+  HttpServer(Hub &hub, Lights &lights, Display &display, SettingsStore &settings, Spotify *spotify, const std::filesystem::path &web_dir,
              const std::filesystem::path &photos_dir);
   ~HttpServer();
 

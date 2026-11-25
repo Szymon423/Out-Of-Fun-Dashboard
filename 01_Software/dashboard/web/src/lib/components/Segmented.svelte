@@ -1,4 +1,4 @@
-<!-- iOS-style segmented control. -->
+<!-- iOS-style segmented control. `large` for the control bar, where it is touched in passing. -->
 <script lang="ts" generics="T extends string">
   import type { Component } from 'svelte';
 
@@ -6,13 +6,19 @@
     options,
     value,
     onchange,
-  }: { options: { value: T; label: string; icon?: Component }[]; value: T; onchange: (v: T) => void } = $props();
+    large = false,
+  }: {
+    options: { value: T; label: string; icon?: Component }[];
+    value: T;
+    onchange: (v: T) => void;
+    large?: boolean;
+  } = $props();
 </script>
 
-<div class="segmented" data-interactive>
+<div class="segmented" class:large data-interactive>
   {#each options as o (o.value)}
     <button class:on={o.value === value} onclick={() => onchange(o.value)}>
-      {#if o.icon}<o.icon size={16} strokeWidth={2} />{/if}
+      {#if o.icon}<o.icon size={large ? 20 : 16} strokeWidth={2} />{/if}
       {o.label}
     </button>
   {/each}
@@ -36,6 +42,18 @@
     font-size: 15px;
     font-weight: 560;
     color: var(--muted);
+  }
+
+  .large {
+    padding: 4px;
+    border-radius: 16px;
+  }
+
+  .large button {
+    min-height: 56px;
+    padding: 0 20px;
+    border-radius: 12px;
+    font-size: 16px;
   }
 
   button.on {

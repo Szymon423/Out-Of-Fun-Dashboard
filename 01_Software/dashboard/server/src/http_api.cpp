@@ -38,7 +38,7 @@ struct HttpServer::Impl {
   std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
 };
 
-HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spotify,
+HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, SettingsStore &settings, Spotify *spotify,
                        const std::filesystem::path &web_dir, const std::filesystem::path &photos_dir)
     : impl_(std::make_unique<Impl>()) {
   auto &server = impl_->server;
@@ -122,6 +122,13 @@ HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spot
     }
   });
 
+  server.Post("/api/settings", [&settings](const httplib::Request &req, httplib::Response &res) {
+    const json body = json::parse(req.body, nullptr, false);
+    if (body.is_discarded()) return send_error(res, 400, "the body is not JSON");
+    if (std::string error = settings.apply(body); !error.empty()) return send_error(res, 400, error);
+    res.status = 204;
+  });
+
   server.Post("/api/display", [&display](const httplib::Request &req, httplib::Response &res) {
     const json body = json::parse(req.body, nullptr, false);
     const auto brightness = body.is_object() ? body.find("brightness") : body.end();
@@ -168,7 +175,14 @@ HttpServer::HttpServer(Hub &hub, Lights &lights, Display &display, Spotify *spot
     const std::string uri = req.get_param_value("uri");
     if (!uri.starts_with("spotify:")) return send_error(res, 400, "expected ?uri=spotify:...");
     if (!spotify) return send_error(res, 503, "Spotify is not configured");
-    const json tracks = spotify->tracks(uri);
+    const auto number = [&](const char *name, int fallback) {
+      try {
+        return req.has_param(name) ? std::stoi(req.get_param_value(name)) : fallback;
+      } catch (const std::exception &) {
+        return fallback;
+      }
+    };
+    const json tracks = spotify->tracks(uri, number("offset", 0), number("limit", 50));
     if (tracks.is_null()) return send_error(res, 502, "Spotify did not give the tracks");
     send_json(res, 200, tracks);
   });

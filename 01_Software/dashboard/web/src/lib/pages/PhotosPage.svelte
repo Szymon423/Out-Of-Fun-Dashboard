@@ -6,24 +6,18 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Images from '@lucide/svelte/icons/images';
   import Slideshow from '../components/Slideshow.svelte';
-  import { nav, PAGES } from '../nav.svelte';
-  import { dash } from '../state.svelte';
+  import { photoClock, stepPhoto } from '../photoClock.svelte';
+  import { dash, settings } from '../state.svelte';
 
   const dateFmt = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
   const photos = $derived(dash.photos?.items ?? []);
-  const visible = $derived(PAGES[nav.index]?.id === 'photos' && !nav.overview && !nav.saver);
-  let current = $state(0);
-  const photo = $derived(photos.length ? photos[current % photos.length] : null);
-
-  function step(by: number): void {
-    const n = photos.length;
-    if (n) current = (((current + by) % n) + n) % n;
-  }
+  const photo = $derived(photos.length ? photos[photoClock.index % photos.length] : null);
+  const step = stepPhoto; // the same photo everywhere (photoClock.svelte.ts)
 </script>
 
 <div class="page">
   {#if photos.length}
-    <Slideshow {photos} intervalMs={12000} running={visible} bind:current />
+    <Slideshow {photos} current={photoClock.index} zoomMs={settings().photoIntervalS * 1000 + 2500} />
     <div class="scrim"></div>
     <header>
       <h1>Zdjęcia</h1>
