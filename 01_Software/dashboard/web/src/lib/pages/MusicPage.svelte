@@ -57,6 +57,7 @@
     tab = value;
     page = 0;
     open = null;
+    opening++;
   }
 
   // An opened playlist or album: its tracks, seven to a page.
@@ -79,12 +80,17 @@
   const MORE = 50;
   const MAX_TRACKS = 500;
 
+  // Which opening the answers belong to. Not `open === item`: open is $state, so it holds a
+  // proxy of a plain item (the liked songs), never equal to the item itself.
+  let opening = 0;
+
   async function openItem(item: LibraryItem): Promise<void> {
+    const mine = ++opening;
     open = item;
     list = null;
     listPage = 0;
     const first = await fetchTracks(item.uri, 0, FIRST);
-    if (open !== item) return;
+    if (mine !== opening) return;
     if (!first) {
       list = 'error';
       return;
@@ -94,7 +100,7 @@
     const total = Math.min(first.total, MAX_TRACKS);
     for (let offset = tracks.length; offset < total; offset += MORE) {
       const next = await fetchTracks(item.uri, offset, MORE);
-      if (open !== item || !next || !next.tracks.length) return;
+      if (mine !== opening || !next || !next.tracks.length) return;
       list = [...(list as Track[]), ...next.tracks];
     }
   }
