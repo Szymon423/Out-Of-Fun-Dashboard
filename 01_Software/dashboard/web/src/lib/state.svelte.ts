@@ -36,6 +36,7 @@ export const dash: DashboardState = $state({
 export const DEFAULT_SETTINGS: Settings = {
   photoIntervalS: 20,
   photoOrder: 'random',
+  saverAfterS: 300,
   nightEnabled: false,
   nightFrom: '22:00',
   nightTo: '06:30',

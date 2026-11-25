@@ -3,6 +3,8 @@
 //   photoIntervalS   seconds each photo stays, 5-600 (default 20)
 //   photoOrder       "random" (a random batch from the whole library) or "newest" (the library
 //                    from the newest photo back, batch after batch)
+//   saverAfterS      seconds without a touch before the screensaver, 30-3600, or 0 for never
+//                    (default 300)
 //   nightEnabled     the night screensaver: black, only the clock and the date
 //   nightFrom/To     its hours, "HH:MM"; may run past midnight
 //   hiddenPlaylists  spotify: URIs left out of the music page's library

@@ -199,6 +199,7 @@ export interface DashboardState {
 export interface Settings {
   photoIntervalS: number; // how long each photo stays, everywhere at once
   photoOrder: 'random' | 'newest';
+  saverAfterS: number; // without a touch before the screensaver; 0: never
   nightEnabled: boolean; // the night screensaver: black, only the clock and the date
   nightFrom: string; // "HH:MM"
   nightTo: string; // "HH:MM", may be after midnight

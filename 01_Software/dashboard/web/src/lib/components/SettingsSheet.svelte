@@ -3,7 +3,8 @@
   (photos, screensaver, music), each with what is set now; a tap opens the module with big
   options and a way back:
     photos       how long each photo stays and in which order
-    screensaver  the night screensaver (black, clock and date only) and its hours
+    screensaver  how long without a touch before it starts, the night screensaver (black,
+                 clock and date only) and its hours
     music        which playlists the music page shows: covers as on that page, a green frame
                  when shown, greyed out without the frame when hidden
   Kept by the server (settings.hpp), so they survive restarts and updates. Mounted next to the
@@ -45,11 +46,22 @@
     { value: 120, label: '2 min' },
     { value: 300, label: '5 min' },
   ];
+  const SAVER_AFTER = [
+    { value: 60, label: '1 min' },
+    { value: 120, label: '2 min' },
+    { value: 300, label: '5 min' },
+    { value: 600, label: '10 min' },
+    { value: 1800, label: '30 min' },
+    { value: 0, label: 'Nigdy' },
+  ];
   const ORDERS = [
     { value: 'random' as const, label: 'Losowo', detail: 'Za każdym razem inne zdjęcia z całej biblioteki' },
     { value: 'newest' as const, label: 'Od najnowszych', detail: 'Po kolei, od ostatnio zrobionych wstecz' },
   ];
 
+  const saverAfterLabel = $derived(
+    SAVER_AFTER.find((a) => a.value === s.saverAfterS)?.label ?? `${Math.round(s.saverAfterS / 60)} min`,
+  );
   const intervalLabel = $derived(INTERVALS.find((i) => i.value === s.photoIntervalS)?.label ?? `${s.photoIntervalS} s`);
   const shownCount = $derived(playlists.filter((p) => !s.hiddenPlaylists.includes(p.uri)).length);
 
@@ -66,7 +78,7 @@
       title: 'Wygaszacz',
       icon: Lock,
       color: '#5e5ce6',
-      summary: s.nightEnabled ? `Nocny ${s.nightFrom}–${s.nightTo}` : 'Nocny wyłączony',
+      summary: `${s.saverAfterS ? `Po ${saverAfterLabel}` : 'Nigdy sam'} · ${s.nightEnabled ? `nocny ${s.nightFrom}–${s.nightTo}` : 'nocny wył.'}`,
     },
     {
       id: 'music',
@@ -172,7 +184,16 @@
           </div>
         </div>
       {:else if module === 'saver'}
-        <div class="body">
+        <div class="body scroll">
+          <h3>Włącz po bezczynności</h3>
+          <div class="choices six">
+            {#each SAVER_AFTER as a (a.value)}
+              <button class="choice" class:on={s.saverAfterS === a.value} onclick={() => saveSettings({ saverAfterS: a.value })}>
+                {a.label}
+              </button>
+            {/each}
+          </div>
+          <h3>Nocą</h3>
           <div class="switch-row">
             <span>
               Wygaszacz nocny

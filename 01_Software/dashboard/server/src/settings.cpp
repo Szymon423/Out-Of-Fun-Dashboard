@@ -12,6 +12,7 @@ using nlohmann::json;
 json default_settings() {
   return {
       {"photoIntervalS", 20},     {"photoOrder", "random"}, {"nightEnabled", false},
+      {"saverAfterS", 300},
       {"nightFrom", "22:00"},     {"nightTo", "06:30"},     {"hiddenPlaylists", json::array()},
   };
 }
@@ -26,6 +27,10 @@ std::string check_settings(const json &change) {
       }
     } else if (key == "photoOrder") {
       if (value != "random" && value != "newest") return R"(photoOrder: "random" or "newest")";
+    } else if (key == "saverAfterS") {
+      const bool ok = value.is_number_integer() &&
+                      (value.get<int>() == 0 || (value.get<int>() >= 30 && value.get<int>() <= 3600));
+      if (!ok) return "saverAfterS: seconds, 30-3600, or 0 for never";
     } else if (key == "nightEnabled") {
       if (!value.is_boolean()) return "nightEnabled: true or false";
     } else if (key == "nightFrom" || key == "nightTo") {

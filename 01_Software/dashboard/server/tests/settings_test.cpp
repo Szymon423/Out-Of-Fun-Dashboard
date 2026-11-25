@@ -19,6 +19,9 @@ int main() {
   CHECK(!dash::check_settings({{"photoIntervalS", 2}}).empty());
   CHECK(!dash::check_settings({{"photoIntervalS", "30"}}).empty());
   CHECK(dash::check_settings({{"photoOrder", "newest"}}).empty());
+  CHECK(dash::check_settings({{"saverAfterS", 0}}).empty());
+  CHECK(dash::check_settings({{"saverAfterS", 600}}).empty());
+  CHECK(!dash::check_settings({{"saverAfterS", 10}}).empty());
   CHECK(!dash::check_settings({{"photoOrder", "oldest"}}).empty());
   CHECK(dash::check_settings({{"nightFrom", "23:30"}, {"nightTo", "06:00"}, {"nightEnabled", true}}).empty());
   CHECK(!dash::check_settings({{"nightFrom", "24:00"}}).empty());

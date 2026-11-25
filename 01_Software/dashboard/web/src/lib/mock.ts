@@ -187,6 +187,7 @@ export function mockState(): DashboardState {
     settings: {
       photoIntervalS: 20,
       photoOrder: 'random',
+      saverAfterS: 300,
       nightEnabled: new URLSearchParams(location.search).has('night'),
       nightFrom: '00:00',
       nightTo: '23:59',

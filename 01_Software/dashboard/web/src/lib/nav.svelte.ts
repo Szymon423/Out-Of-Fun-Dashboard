@@ -1,6 +1,6 @@
 // Pages, overview and screensaver state.
 // URL parameters for testing: ?page=weather ?overview ?controls ?saver (screensaver at once)
-// ?saverAfter=20 (seconds of idle time before the screensaver; default 5 minutes).
+// ?saverAfter=20 (seconds of idle time before the screensaver, over the setting saverAfterS).
 import type { Component } from 'svelte';
 import CalendarDays from '@lucide/svelte/icons/calendar-days';
 import CloudSun from '@lucide/svelte/icons/cloud-sun';
@@ -9,6 +9,7 @@ import Images from '@lucide/svelte/icons/images';
 import LayoutGrid from '@lucide/svelte/icons/layout-grid';
 import Music from '@lucide/svelte/icons/music';
 import Printer from '@lucide/svelte/icons/printer';
+import { settings } from './state.svelte';
 
 export type PageId = 'home' | 'printer' | 'calendar' | 'summary' | 'weather' | 'music' | 'photos';
 
@@ -71,8 +72,12 @@ export function toggleOverview(open = !nav.overview): void {
 }
 
 // Screensaver after a period without touch. It returns to the summary underneath, so a tap
-// that closes it lands on the overview of everything.
-const SAVER_AFTER_MS = (Number(params.get('saverAfter')) || 5 * 60) * 1000;
+// that closes it lands on the overview of everything. The time is set in the settings
+// (saverAfterS, 0: never).
+const saverAfterParam = Number(params.get('saverAfter')) || 0;
+function saverAfterMs(): number {
+  return (saverAfterParam || settings().saverAfterS) * 1000;
+}
 let lastTouch = Date.now();
 
 export function touched(): void {
@@ -97,7 +102,8 @@ export function openSaver(): void {
 
 window.addEventListener('pointerdown', touched, { capture: true, passive: true });
 setInterval(() => {
-  if (!nav.saver && Date.now() - lastTouch > SAVER_AFTER_MS) {
+  const after = saverAfterMs();
+  if (after > 0 && !nav.saver && Date.now() - lastTouch > after) {
     nav.saver = true;
     nav.overview = false;
     nav.controls = false;
